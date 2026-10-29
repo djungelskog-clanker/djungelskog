@@ -299,8 +299,8 @@ func (m *manager) pump(t *thread, p *claudeProc) {
 				for _, b := range msg.Content {
 					if b.Type == "tool_use" {
 						title, details := toolTitle(b.Name, b.Input)
+						open().ToolStart(b.ID, title, details) // open first: it resets titles
 						titles[b.ID] = title
-						open().ToolStart(b.ID, title, details)
 					}
 				}
 			case "user":
