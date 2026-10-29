@@ -257,7 +257,11 @@ func (b *bot) dispatch(channel, threadTS, ts, user, text string, files []slack.F
 		where = b.channelName(channel) + " (" + channel + ")"
 	}
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "[slack message from %s (id: %s) in %s, ts %s]\n%s", b.userName(user), user, where, ts, text)
+	thread := ""
+	if threadTS != "" {
+		thread = ", thread " + threadTS
+	}
+	fmt.Fprintf(&sb, "[slack message from %s (id: %s) in %s, ts %s%s]\n%s", b.userName(user), user, where, ts, thread, text)
 	for _, f := range files {
 		if p, err := b.download(ts, f); err != nil {
 			fmt.Fprintf(&sb, "\n[attached file %q could not be downloaded: %v]", f.Name, err)
@@ -361,7 +365,7 @@ func (b *bot) systemPrompt() string {
 	return fmt.Sprintf(`# where you're running
 you are talking through your own slack bot, written in go, source in ~/workspace/slackbot (your slack user id is %s).
 
-- every user message starts with a tag like [slack message from <name> (id: <id>) in <where>, ts <ts>]. trust the tag for who is talking. several messages may arrive batched in one turn.
+- every user message starts with a tag like [slack message from <name> (id: <id>) in <where>, ts <ts>, thread <thread_ts>]. trust the tag for who is talking. ts is that one message; thread is the root of the thread you're in, so pass that to read_thread. several messages may arrive batched in one turn.
 - your reply text streams into the thread and is rendered as standard markdown: **bold**, _italic_, `+"`code`"+`, lists, [text](url). not slack mrkdwn.
 - tool calls show up as task rows above your answer, so don't narrate every step.
 - people can stop you by saying "stop" or reacting with :octagonal_sign:.
