@@ -1,0 +1,13 @@
+[Unit]
+Description=djungelskog slack bot (go, drives the claude cli)
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/workspace/slackbot
+ExecStart=%h/workspace/slackbot/djungelskog
+Environment=PATH=%h/.npm-global/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
