@@ -209,6 +209,15 @@ func (b *bot) handle(inner slackevents.EventsAPIInnerEvent, raw []byte) {
 			}
 		}
 
+	case *slackevents.AgentSessionStoppedEvent:
+		// slack already halted the streams; we still have to stop claude
+		// and move the session out of "processing" ourselves
+		if b.cfg.AllowFrom[e.User] && b.mgr.StopThread(e.Channel, e.ThreadTimestamp) {
+			slog.Info("stopped by stop button", "user", e.User)
+			return
+		}
+		b.setStatus(e.Channel, e.ThreadTimestamp, "active")
+
 	case *slackevents.AssistantThreadStartedEvent:
 		th := e.AssistantThread
 		err := b.api.SetAssistantThreadsSuggestedPrompts(slack.AssistantThreadsSetSuggestedPromptsParameters{
@@ -346,8 +355,10 @@ func (b *bot) postPlain(channel, threadTS, text string) {
 	}
 }
 
+// setStatus moves the thread's agent session between "processing" (loading
+// indicator plus slack's native stop button) and "active".
 func (b *bot) setStatus(channel, threadTS, status string) {
-	err := b.api.SetAssistantThreadsStatus(slack.AssistantThreadsSetStatusParameters{
+	_, err := b.api.SetAgentSessionStatus(slack.AgentSessionSetStatusParameters{
 		ChannelID: channel, ThreadTS: threadTS, Status: status,
 	})
 	if err != nil {
@@ -362,7 +373,7 @@ you are talking through your own slack bot, written in go, source in ~/workspace
 - every user message starts with a tag like [slack message from <name> (id: <id>) in <where>, ts <ts>]. trust the tag for who is talking. several messages may arrive batched in one turn.
 - your reply text streams into the thread and is rendered as standard markdown: **bold**, _italic_, `+"`code`"+`, lists, [text](url). not slack mrkdwn.
 - tool calls show up as task rows above your answer, so don't narrate every step.
-- people can stop you by saying "stop" or reacting with :octagonal_sign:.
+- people can stop you with slack's stop button, by saying "stop", or by reacting with :octagonal_sign:.
 
 # slack tools (mcp__slack__*)
 - read channels, threads, canvases; search messages; look people up. use them whenever someone references a channel, a person, a link to a message or a canvas, or asks what's going on. don't guess.

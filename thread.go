@@ -184,6 +184,9 @@ func (m *manager) kick(t *thread) {
 		t.busy = false
 		t.mu.Unlock()
 		m.bot.postPlain(t.channel, t.threadTS, msg)
+		if t.assistant {
+			m.bot.setStatus(t.channel, t.threadTS, "active")
+		}
 	}
 	p, err := m.ensureProc(t)
 	if err != nil {
@@ -192,7 +195,7 @@ func (m *manager) kick(t *thread) {
 		return
 	}
 	if t.assistant {
-		m.bot.setStatus(t.channel, t.threadTS, "is thinking…")
+		m.bot.setStatus(t.channel, t.threadTS, "processing")
 	}
 	var parts []string
 	for _, in := range batch {
@@ -236,6 +239,10 @@ func (m *manager) pump(t *thread, p *claudeProc) {
 			}
 			rs.Finish(ctx, note)
 			m.track(t, rs)
+		}
+		if rs != nil || t.assistant {
+			// stopStream should do this, but not if the stream already broke
+			m.bot.setStatus(t.channel, t.threadTS, "active")
 		}
 		rs = nil
 		t.mu.Lock()
@@ -294,9 +301,6 @@ func (m *manager) pump(t *thread, p *claudeProc) {
 						title, details := toolTitle(b.Name, b.Input)
 						titles[b.ID] = title
 						open().ToolStart(b.ID, title, details)
-						if t.assistant {
-							m.bot.setStatus(t.channel, t.threadTS, title+"…")
-						}
 					}
 				}
 			case "user":
