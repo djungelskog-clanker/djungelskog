@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -167,5 +168,43 @@ func TestReapForgetsIdleThreads(t *testing.T) {
 	}
 	if m.threads[fresh.key] == nil || m.byToken[fresh.token] == nil || m.byMsg["2.1"] == "" {
 		t.Error("active thread forgotten")
+	}
+}
+
+type nopCloser struct{}
+
+func (nopCloser) Write(b []byte) (int, error) { return len(b), nil }
+func (nopCloser) Close() error                { return nil }
+
+// A reaped process ends its pump without touching the thread, so the thread
+// is forgotten on the next pass instead of a full idle timeout later.
+func TestReapProcThenForget(t *testing.T) {
+	m := &manager{
+		bot:     &bot{cfg: config{IdleTimeout: time.Minute}},
+		threads: map[string]*thread{},
+		byToken: map[string]*thread{},
+		byMsg:   map[string]string{},
+	}
+	th := m.get("C1", "1.0", false)
+	p := &claudeProc{cmd: &exec.Cmd{}, stdin: nopCloser{}, Events: make(chan event)}
+	th.proc = p
+	stale := time.Now().Add(-time.Hour)
+	th.lastActive = stale
+	done := make(chan struct{})
+	go func() { m.pump(th, p); close(done) }()
+
+	m.reap()
+	if th.proc != nil || m.threads[th.key] == nil {
+		t.Fatal("first pass should close the process and keep the thread")
+	}
+	close(p.Events) // the process exits
+	<-done
+	if !th.lastActive.Equal(stale) || th.dirty {
+		t.Fatal("old pump touched the thread after being reaped")
+	}
+
+	m.reap()
+	if m.threads[th.key] != nil {
+		t.Fatal("second pass should forget the thread")
 	}
 }

@@ -265,10 +265,16 @@ func (m *manager) pump(t *thread, p *claudeProc) {
 			}
 		case ev, ok := <-p.Events:
 			if !ok {
-				m.dropProc(t, p)
 				t.mu.Lock()
+				current := t.proc == p
 				wasBusy := t.busy
 				t.mu.Unlock()
+				if !current {
+					// reaped or replaced on purpose; the thread state now belongs
+					// to whoever took over, so don't end their turn or touch lastActive
+					return
+				}
+				m.dropProc(t, p)
 				note := ""
 				if wasBusy {
 					note = "_(my claude process died mid-turn. send that again?)_"
@@ -403,7 +409,7 @@ func (m *manager) reap() {
 
 	for _, t := range idle {
 		t.mu.Lock()
-		if t.busy || t.proc == nil { // woke up meanwhile
+		if t.busy || t.proc == nil || len(t.queue) > 0 { // woke up meanwhile
 			t.mu.Unlock()
 			continue
 		}
