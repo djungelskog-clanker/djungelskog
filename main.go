@@ -24,7 +24,7 @@ import (
 type config struct {
 	BotToken    string
 	AppToken    string
-	AllowFrom   map[string]bool
+	AllowFrom   *allowlist
 	WorkDir     string
 	DataDir     string
 	Model       string
@@ -38,7 +38,6 @@ func loadConfig() (config, error) {
 	c := config{
 		BotToken:    os.Getenv("SLACK_BOT_TOKEN"),
 		AppToken:    os.Getenv("SLACK_APP_TOKEN"),
-		AllowFrom:   map[string]bool{},
 		WorkDir:     envOr("WORK_DIR", "/home/djungelskog/workspace"),
 		DataDir:     envOr("DATA_DIR", "data"),
 		Model:       os.Getenv("MODEL"),
@@ -49,11 +48,7 @@ func loadConfig() (config, error) {
 	if c.BotToken == "" || c.AppToken == "" {
 		return c, fmt.Errorf("SLACK_BOT_TOKEN and SLACK_APP_TOKEN are required")
 	}
-	for _, id := range strings.Split(os.Getenv("ALLOW_FROM"), ",") {
-		if id = strings.TrimSpace(id); id != "" {
-			c.AllowFrom[id] = true
-		}
-	}
+	c.AllowFrom = newAllowlist(".env", os.Getenv("ALLOW_FROM"))
 	if d, err := time.ParseDuration(os.Getenv("IDLE_TIMEOUT")); err == nil {
 		c.IdleTimeout = d
 	}
@@ -199,7 +194,7 @@ func (b *bot) handle(inner slackevents.EventsAPIInnerEvent, raw []byte) {
 		b.dispatch(e.Channel, threadTS, e.TimeStamp, e.User, e.Text, files, actionToken, e.ThreadTimeStamp != "")
 
 	case *slackevents.ReactionAddedEvent:
-		if !b.cfg.AllowFrom[e.User] {
+		if !b.cfg.AllowFrom.Has(e.User) {
 			return
 		}
 		switch e.Reaction {
@@ -229,7 +224,7 @@ func (b *bot) handle(inner slackevents.EventsAPIInnerEvent, raw []byte) {
 var selfMentionRe = regexp.MustCompile(`<@([UW][A-Z0-9]+)(\|[^>]*)?>`)
 
 func (b *bot) dispatch(channel, threadTS, ts, user, text string, files []slack.File, actionToken string, assistant bool) {
-	if !b.cfg.AllowFrom[user] {
+	if !b.cfg.AllowFrom.Has(user) {
 		slog.Info("ignoring message from user not on the allowlist", "user", user, "channel", channel)
 		return
 	}

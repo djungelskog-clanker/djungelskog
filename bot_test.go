@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -104,5 +105,30 @@ func TestParseBody(t *testing.T) {
 	text, atts := parseBody(strings.NewReader(raw))
 	if !strings.Contains(text, "hello there") || len(atts) != 1 || atts[0] != "a.pdf" {
 		t.Errorf("got %q %v", text, atts)
+	}
+}
+
+func TestAllowlistReload(t *testing.T) {
+	path := t.TempDir() + "/.env"
+	if err := os.WriteFile(path, []byte("ALLOW_FROM=U1, U2\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a := newAllowlist(path, "U1,U2")
+	if !a.Has("U1") || !a.Has("U2") || a.Has("U3") {
+		t.Fatalf("initial list wrong: %v", a.ids)
+	}
+	if err := os.WriteFile(path, []byte("ALLOW_FROM=U2,U3\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	later := time.Now().Add(time.Second)
+	if err := os.Chtimes(path, later, later); err != nil {
+		t.Fatal(err)
+	}
+	if a.Has("U1") || !a.Has("U2") || !a.Has("U3") {
+		t.Fatalf("reloaded list wrong: %v", a.ids)
+	}
+	os.Remove(path)
+	if !a.Has("U3") {
+		t.Fatal("missing file should keep the last list")
 	}
 }

@@ -100,7 +100,7 @@ func (b *bot) handleInteraction(evt socketmode.Event) {
 }
 
 func (b *bot) openSecretModal(cb slack.InteractionCallback, name string) {
-	if !b.cfg.AllowFrom[cb.User.ID] {
+	if !b.cfg.AllowFrom.Has(cb.User.ID) {
 		b.ephemeral(cb.Channel.ID, cb.User.ID, "only people on my allowlist can set secrets")
 		return
 	}
@@ -128,7 +128,7 @@ func (b *bot) saveSecret(cb slack.InteractionCallback) {
 		slog.Error("secret modal: bad metadata", "err", err)
 		return
 	}
-	if !b.cfg.AllowFrom[cb.User.ID] {
+	if !b.cfg.AllowFrom.Has(cb.User.ID) {
 		return
 	}
 	value := strings.TrimSpace(cb.View.State.Values["secret"]["value"].Value)
