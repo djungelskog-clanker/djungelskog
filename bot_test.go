@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -149,12 +150,7 @@ func TestAllowlistReload(t *testing.T) {
 }
 
 func TestReapForgetsIdleThreads(t *testing.T) {
-	m := &manager{
-		bot:     &bot{cfg: config{IdleTimeout: time.Minute}},
-		threads: map[string]*thread{},
-		byToken: map[string]*thread{},
-		byMsg:   map[string]string{},
-	}
+	m := newTestManager(t)
 	old := m.get("C1", "1.0", false)
 	old.lastActive = time.Now().Add(-time.Hour)
 	m.noteMessage("1.1", old.key)
@@ -179,12 +175,7 @@ func (nopCloser) Close() error                { return nil }
 // A reaped process ends its pump without touching the thread, so the thread
 // is forgotten on the next pass instead of a full idle timeout later.
 func TestReapProcThenForget(t *testing.T) {
-	m := &manager{
-		bot:     &bot{cfg: config{IdleTimeout: time.Minute}},
-		threads: map[string]*thread{},
-		byToken: map[string]*thread{},
-		byMsg:   map[string]string{},
-	}
+	m := newTestManager(t)
 	th := m.get("C1", "1.0", false)
 	p := &claudeProc{cmd: &exec.Cmd{}, stdin: nopCloser{}, Events: make(chan event)}
 	th.proc = p
@@ -206,5 +197,51 @@ func TestReapProcThenForget(t *testing.T) {
 	m.reap()
 	if m.threads[th.key] != nil {
 		t.Fatal("second pass should forget the thread")
+	}
+}
+
+func newTestManager(t *testing.T) *manager {
+	t.Helper()
+	m, err := newManager(&bot{cfg: config{IdleTimeout: time.Minute, DataDir: t.TempDir()}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return m
+}
+
+func TestPruneSessions(t *testing.T) {
+	m := newTestManager(t)
+	now := time.Now()
+	ts := func(d time.Duration) string { return strconv.FormatInt(now.Add(-d).Unix(), 10) + ".000100" }
+	day := 24 * time.Hour
+	keys := map[string]bool{ // key -> should survive
+		"C1:" + ts(40*day):           false, // old and quiet
+		"C1:" + ts(40*day+time.Hour): true,  // old but active this week
+		"C1:" + ts(10*day):           true,  // quiet but young
+		"D1:":                        true,  // top level dm, no age
+		"C1:" + ts(50*day):           true,  // old, quiet, but no seen record yet
+	}
+	sess, seen := map[string]string{}, map[string]time.Time{}
+	for k := range keys {
+		sess[k] = "id-" + k
+		seen[k] = now.Add(-10 * day)
+	}
+	seen["C1:"+ts(40*day+time.Hour)] = now.Add(-day)
+	delete(seen, "C1:"+ts(50*day))
+	_ = m.sessions.Update(func(map[string]string) map[string]string { return sess })
+	_ = m.seen.Update(func(map[string]time.Time) map[string]time.Time { return seen })
+
+	m.mu.Lock()
+	m.pruneSessions(now)
+	m.mu.Unlock()
+
+	got := m.sessions.Get()
+	for k, keep := range keys {
+		if (got[k] != "") != keep {
+			t.Errorf("%s: kept=%v, want %v", k, got[k] != "", keep)
+		}
+	}
+	if _, ok := m.seen.Get()["C1:"+ts(50*day)]; !ok {
+		t.Error("missing seen record not backfilled")
 	}
 }

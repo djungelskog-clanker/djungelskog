@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -54,14 +55,26 @@ type manager struct {
 	byToken  map[string]*thread
 	byMsg    map[string]string // message ts -> thread key, for reaction stops
 	sessions *jsonStore[map[string]string]
+	seen     *jsonStore[map[string]time.Time] // thread key -> last finished turn
 }
+
+// Sessions of threads older than sessionMaxAge that have been quiet for
+// sessionIdle are dropped, so sessions.json doesn't grow forever.
+const (
+	sessionMaxAge = 30 * 24 * time.Hour
+	sessionIdle   = 7 * 24 * time.Hour
+)
 
 func newManager(b *bot) (*manager, error) {
 	s, err := openStore[map[string]string](b.cfg.DataDir + "/sessions.json")
 	if err != nil {
 		return nil, err
 	}
-	m := &manager{bot: b, threads: map[string]*thread{}, byToken: map[string]*thread{}, byMsg: map[string]string{}, sessions: s}
+	seen, err := openStore[map[string]time.Time](b.cfg.DataDir + "/seen.json")
+	if err != nil {
+		return nil, err
+	}
+	m := &manager{bot: b, threads: map[string]*thread{}, byToken: map[string]*thread{}, byMsg: map[string]string{}, sessions: s, seen: seen}
 	go m.reaper()
 	return m, nil
 }
@@ -336,6 +349,13 @@ func (m *manager) pump(t *thread, p *claudeProc) {
 						s[t.key] = id
 						return s
 					})
+					_ = m.seen.Update(func(s map[string]time.Time) map[string]time.Time {
+						if s == nil {
+							s = map[string]time.Time{}
+						}
+						s[t.key] = time.Now()
+						return s
+					})
 				}
 				t.mu.Lock()
 				stopped := t.interrupted
@@ -405,6 +425,7 @@ func (m *manager) reap() {
 			}
 		}
 	}
+	m.pruneSessions(time.Now())
 	m.mu.Unlock()
 
 	for _, t := range idle {
@@ -426,6 +447,58 @@ func (m *manager) reap() {
 			}
 		}
 	}
+}
+
+// pruneSessions forgets the session ids of old, quiet threads. Callers hold
+// m.mu, so a thread can't come back to life halfway through.
+func (m *manager) pruneSessions(now time.Time) {
+	seen := m.seen.Get()
+	var drop []string
+	for key := range m.sessions.Get() {
+		last, ok := seen[key]
+		if !ok {
+			// from before seen.json existed: start counting from now
+			_ = m.seen.Update(func(s map[string]time.Time) map[string]time.Time {
+				if s == nil {
+					s = map[string]time.Time{}
+				}
+				s[key] = now
+				return s
+			})
+			continue
+		}
+		start, ok := threadStart(key)
+		if ok && m.threads[key] == nil && now.Sub(start) > sessionMaxAge && now.Sub(last) > sessionIdle {
+			drop = append(drop, key)
+		}
+	}
+	if len(drop) == 0 {
+		return
+	}
+	_ = m.sessions.Update(func(s map[string]string) map[string]string {
+		for _, k := range drop {
+			delete(s, k)
+		}
+		return s
+	})
+	_ = m.seen.Update(func(s map[string]time.Time) map[string]time.Time {
+		for _, k := range drop {
+			delete(s, k)
+		}
+		return s
+	})
+	slog.Info("pruned old sessions", "count", len(drop))
+}
+
+// threadStart reads the thread's age from its root ts. Top level dms have
+// no thread ts; they're one long conversation, so they never count as old.
+func threadStart(key string) (time.Time, bool) {
+	_, ts, _ := strings.Cut(key, ":")
+	sec, err := strconv.ParseFloat(ts, 64)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return time.Unix(int64(sec), 0), true
 }
 
 func firstNonEmpty(s ...string) string {
