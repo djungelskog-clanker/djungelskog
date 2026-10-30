@@ -73,6 +73,10 @@ func (m *manager) get(channel, threadTS string, assistant bool) *thread {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if t, ok := m.threads[key]; ok {
+		// touch under m.mu so the reaper can't forget it between lookup and use
+		t.mu.Lock()
+		t.lastActive = time.Now()
+		t.mu.Unlock()
 		return t
 	}
 	b := make([]byte, 16)
@@ -362,37 +366,57 @@ func (m *manager) dropProc(t *thread, p *claudeProc) {
 }
 
 // reaper shuts down claude processes for quiet threads and, when enabled,
-// runs a cheap memory review over what was said.
+// runs a cheap memory review over what was said. Threads that were already
+// shut down get forgotten; the session id in sessions.json is enough to
+// resume them later.
 func (m *manager) reaper() {
 	for range time.Tick(time.Minute) {
-		m.mu.Lock()
-		var idle []*thread
-		for _, t := range m.threads {
-			t.mu.Lock()
-			if !t.busy && t.proc != nil && time.Since(t.lastActive) > m.bot.cfg.IdleTimeout {
-				idle = append(idle, t)
-			}
-			t.mu.Unlock()
-		}
-		m.mu.Unlock()
+		m.reap()
+	}
+}
 
-		for _, t := range idle {
-			t.mu.Lock()
-			if t.busy || t.proc == nil { // woke up meanwhile
-				t.mu.Unlock()
-				continue
+func (m *manager) reap() {
+	m.mu.Lock()
+	var idle []*thread
+	forgot := false
+	for key, t := range m.threads {
+		t.mu.Lock()
+		quiet := !t.busy && len(t.queue) == 0 && time.Since(t.lastActive) > m.bot.cfg.IdleTimeout
+		switch {
+		case quiet && t.proc != nil:
+			idle = append(idle, t)
+		case quiet:
+			delete(m.threads, key)
+			delete(m.byToken, t.token)
+			forgot = true
+		}
+		t.mu.Unlock()
+	}
+	if forgot {
+		for ts, key := range m.byMsg {
+			if m.threads[key] == nil {
+				delete(m.byMsg, ts)
 			}
-			p := t.proc
-			t.proc = nil
-			review := t.dirty
-			t.dirty = false
+		}
+	}
+	m.mu.Unlock()
+
+	for _, t := range idle {
+		t.mu.Lock()
+		if t.busy || t.proc == nil { // woke up meanwhile
 			t.mu.Unlock()
-			p.Close()
-			slog.Info("reaped idle thread", "thread", t.key)
-			if review && m.bot.cfg.MemoryModel != "" {
-				if id := m.sessions.Get()[t.key]; id != "" {
-					go m.bot.reviewMemory(id)
-				}
+			continue
+		}
+		p := t.proc
+		t.proc = nil
+		review := t.dirty
+		t.dirty = false
+		t.mu.Unlock()
+		p.Close()
+		slog.Info("reaped idle thread", "thread", t.key)
+		if review && m.bot.cfg.MemoryModel != "" {
+			if id := m.sessions.Get()[t.key]; id != "" {
+				go m.bot.reviewMemory(id)
 			}
 		}
 	}

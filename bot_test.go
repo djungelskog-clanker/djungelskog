@@ -146,3 +146,26 @@ func TestAllowlistReload(t *testing.T) {
 		t.Fatal("missing file should keep the last list")
 	}
 }
+
+func TestReapForgetsIdleThreads(t *testing.T) {
+	m := &manager{
+		bot:     &bot{cfg: config{IdleTimeout: time.Minute}},
+		threads: map[string]*thread{},
+		byToken: map[string]*thread{},
+		byMsg:   map[string]string{},
+	}
+	old := m.get("C1", "1.0", false)
+	old.lastActive = time.Now().Add(-time.Hour)
+	m.noteMessage("1.1", old.key)
+	fresh := m.get("C1", "2.0", false)
+	m.noteMessage("2.1", fresh.key)
+
+	m.reap()
+
+	if m.threads[old.key] != nil || m.byToken[old.token] != nil || m.byMsg["1.1"] != "" {
+		t.Error("idle thread not forgotten")
+	}
+	if m.threads[fresh.key] == nil || m.byToken[fresh.token] == nil || m.byMsg["2.1"] == "" {
+		t.Error("active thread forgotten")
+	}
+}
