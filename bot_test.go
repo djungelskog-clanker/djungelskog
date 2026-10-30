@@ -63,6 +63,20 @@ func TestParseRef(t *testing.T) {
 	}
 }
 
+func TestMessageLink(t *testing.T) {
+	for _, s := range []string{
+		"<https://hackclub.slack.com/archives/C0BEPN3JH2R/p1787032943387839?thread_ts=1787024149.893349&cid=C0BEPN3JH2R>",
+		"look https://hackclub.enterprise.slack.com/archives/C06RQ9TTEG3/p1719612237677359",
+	} {
+		if !messageLinkRe.MatchString(s) {
+			t.Errorf("missed %q", s)
+		}
+	}
+	if messageLinkRe.MatchString("https://hackclub.slack.com/files/U05MKEZUY67/F0BQ53HJ70R/image.png") {
+		t.Error("matched a file link")
+	}
+}
+
 func TestToolTitle(t *testing.T) {
 	in, _ := json.Marshal(map[string]any{"command": "ls -la", "description": "List Files"})
 	if got, _ := toolTitle("Bash", in); got != "list files" {

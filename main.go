@@ -264,8 +264,54 @@ func (b *bot) dispatch(channel, threadTS, ts, user, text string, files []slack.F
 			fmt.Fprintf(&sb, "\n[attached file: %s (%s)]", p, f.Mimetype)
 		}
 	}
+	for _, a := range b.sharedMessages(channel, ts, text) {
+		sb.WriteString("\n" + fmtUnfurl(a))
+	}
 	b.mgr.Submit(incoming{Channel: channel, ThreadTS: threadTS, TS: ts, User: user, Text: sb.String(),
 		ActionToken: actionToken, Assistant: assistant})
+}
+
+var messageLinkRe = regexp.MustCompile(`https://[a-z0-9.-]*slack\.com/archives/[A-Z0-9]+/p\d+`)
+
+// sharedMessages returns the previews slack unfurls for message links. they
+// show the linked message even from channels the bot isn't in, but get
+// attached a moment after the message is posted, so retry briefly.
+func (b *bot) sharedMessages(channel, ts, text string) []slack.Attachment {
+	if !messageLinkRe.MatchString(text) {
+		return nil
+	}
+	for i := 0; i < 4; i++ {
+		if i > 0 {
+			time.Sleep(time.Second)
+		}
+		msgs, _, _, err := b.api.GetConversationReplies(&slack.GetConversationRepliesParameters{
+			ChannelID: channel, Timestamp: ts, Limit: 1,
+		})
+		if err != nil {
+			slog.Warn("fetch unfurls", "err", err)
+			return nil
+		}
+		var out []slack.Attachment
+		for _, m := range msgs {
+			if m.Timestamp != ts {
+				continue
+			}
+			for _, a := range m.Attachments {
+				if a.IsMsgUnfurl {
+					out = append(out, a)
+				}
+			}
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+	return nil
+}
+
+func fmtUnfurl(a slack.Attachment) string {
+	return fmt.Sprintf("[shared message from %s, %s]\n%s",
+		firstNonEmpty(a.AuthorSubname, a.AuthorName), a.FromURL, a.Text)
 }
 
 // footer that apps posting on someone's behalf tack on

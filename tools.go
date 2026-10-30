@@ -91,6 +91,11 @@ func (b *bot) fmtMessages(msgs []slack.Message) string {
 		for _, f := range m.Files {
 			fmt.Fprintf(&sb, " [file %s: %s id=%s]", f.Filetype, f.Name, f.ID)
 		}
+		for _, a := range m.Attachments {
+			if a.IsMsgUnfurl {
+				sb.WriteString(" " + fmtUnfurl(a))
+			}
+		}
 		sb.WriteString("\n")
 	}
 	return sb.String()
