@@ -71,15 +71,16 @@ func envOr(k, def string) string {
 }
 
 type bot struct {
-	cfg       config
-	api       *slack.Client
-	sm        *socketmode.Client
-	teamID    string
-	botUserID string
-	botID     string
-	mgr       *manager
-	sched     *scheduler
-	mcpAddr   string
+	cfg        config
+	api        *slack.Client
+	sm         *socketmode.Client
+	teamID     string
+	botUserID  string
+	botID      string
+	mgr        *manager
+	sched      *scheduler
+	screenTime *jsonStore[screenTimeData]
+	mcpAddr    string
 
 	cacheMu sync.Mutex
 	names   map[string]string // user id -> display name
@@ -116,6 +117,10 @@ func main() {
 		}
 	}()
 
+	if b.screenTime, err = openScreenTime(cfg.DataDir + "/screentime.json"); err != nil {
+		slog.Error("screen time", "err", err)
+		os.Exit(1)
+	}
 	if b.mgr, err = newManager(b); err != nil {
 		slog.Error("manager", "err", err)
 		os.Exit(1)
@@ -266,6 +271,9 @@ func (b *bot) dispatch(channel, threadTS, ts, user, text string, files []slack.F
 	}
 	for _, a := range b.sharedMessages(channel, ts, text) {
 		sb.WriteString("\n" + fmtUnfurl(a))
+	}
+	if note := countScreenTime(b.screenTime, user, time.Now()); note != "" {
+		sb.WriteString("\n" + note)
 	}
 	b.mgr.Submit(incoming{Channel: channel, ThreadTS: threadTS, TS: ts, User: user, Text: sb.String(),
 		ActionToken: actionToken, Assistant: assistant})

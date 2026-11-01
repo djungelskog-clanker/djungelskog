@@ -245,3 +245,27 @@ func TestPruneSessions(t *testing.T) {
 		t.Error("missing seen record not backfilled")
 	}
 }
+
+func TestScreenTime(t *testing.T) {
+	s, err := openScreenTime(t.TempDir() + "/st.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = s.Update(func(v screenTimeData) screenTimeData {
+		v.Limits = map[string]int{"U1": 2}
+		return v
+	})
+	day1 := time.Date(2026, 11, 1, 22, 30, 0, 0, time.UTC) // 23:30 berlin
+	for i, want := range []bool{false, false, true} {
+		if got := countScreenTime(s, "U1", day1) != ""; got != want {
+			t.Errorf("msg %d: over = %v, want %v", i+1, got, want)
+		}
+	}
+	if countScreenTime(s, "U2", day1) != "" {
+		t.Error("user without a limit got a note")
+	}
+	// 00:30 berlin the next day resets the count
+	if countScreenTime(s, "U1", day1.Add(time.Hour)) != "" {
+		t.Error("count didn't reset at berlin midnight")
+	}
+}
