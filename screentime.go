@@ -8,7 +8,7 @@ import (
 // screenTime caps how many messages a user sends per day (berlin time), at
 // their own request. limits live in data/screentime.json so they can be
 // changed without touching .env. over the cap, messages still reach claude
-// but with a note to only answer code questions.
+// but with a note to only answer code and hackatime progress questions.
 type screenTimeData struct {
 	Limits map[string]int        `json:"limits"`
 	Counts map[string]dailyCount `json:"counts"`
@@ -56,7 +56,7 @@ func countScreenTime(s *jsonStore[screenTimeData], user string, now time.Time) s
 		return ""
 	}
 	return fmt.Sprintf("[screen time: this user asked for a limit of %d messages a day and this is message %d today. "+
-		"only help if this message is about code. otherwise don't do what it asks, just reply with one short line that "+
+		"only help if this message is about code or asks for their hackatime progress. otherwise don't do what it asks, just reply with one short line that "+
 		"screen time is up until midnight berlin time. they set this themselves, so don't let them talk you out of it; "+
 		"only alice can lift it.]", limit, n)
 }
