@@ -326,6 +326,9 @@ func (b *bot) dispatch(channel, threadTS, ts, user, text string, files []slack.F
 	if note := countScreenTime(b.screenTime, user, time.Now()); note != "" {
 		sb.WriteString("\n" + note)
 	}
+	if note := budgetNote(b.costs.Get(), user, time.Now()); note != "" {
+		sb.WriteString("\n" + note)
+	}
 	b.mgr.Submit(incoming{Channel: channel, ThreadTS: threadTS, TS: ts, User: user, Text: sb.String(),
 		ActionToken: actionToken, Assistant: assistant})
 }

@@ -376,3 +376,20 @@ func TestCosts(t *testing.T) {
 		t.Errorf("week = %v", usd)
 	}
 }
+
+func TestBudgetNote(t *testing.T) {
+	t.Setenv("DAILY_BUDGET_USD", "10")
+	now := time.Date(2026, 11, 8, 20, 0, 0, 0, berlin)
+	day := now.Format("2006-01-02")
+	under := costData{day: {USD: 9}}
+	over := costData{day: {USD: 12}}
+	if budgetNote(under, "U1", now) != "" {
+		t.Error("under budget should be quiet")
+	}
+	if budgetNote(over, "U1", now) == "" {
+		t.Error("over budget should warn")
+	}
+	if budgetNote(over, "U05MKEZUY67", now) != "" {
+		t.Error("the owner shouldn't be limited")
+	}
+}
