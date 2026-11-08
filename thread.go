@@ -43,8 +43,17 @@ type thread struct {
 	interrupted bool
 	acked       []string // message ts with a "working on it" reaction
 	debounce    *time.Timer
-	restartProc bool // set_model: start a fresh process after this turn
+	restartProc bool      // set_model: start a fresh process after this turn
+	lastEvent   time.Time // last thing claude said, for the stuck-turn watchdog
+	stuckWarned bool
 }
+
+// a turn with no events from claude for this long gets a note, and is
+// interrupted after stuckKill.
+const (
+	stuckWarn = 15 * time.Minute
+	stuckKill = 45 * time.Minute
+)
 
 // people often send a thought as two or three quick messages; wait this long
 // after the first one so they land in the same turn.
@@ -285,6 +294,8 @@ func (m *manager) kick(t *thread) {
 	t.trigger = batch[len(batch)-1]
 	t.busy = true
 	t.interrupted = false
+	t.lastEvent = time.Now()
+	t.stuckWarned = false
 	for _, in := range batch {
 		if in.TS != "" {
 			t.acked = append(t.acked, in.TS)
@@ -394,6 +405,10 @@ func (m *manager) pump(t *thread, p *claudeProc) {
 				rs.Flush(ctx)
 			}
 		case ev, ok := <-p.Events:
+			t.mu.Lock()
+			t.lastEvent = time.Now()
+			t.stuckWarned = false
+			t.mu.Unlock()
 			if !ok {
 				t.mu.Lock()
 				current := t.proc == p
@@ -556,7 +571,29 @@ func (m *manager) reap() {
 		}
 	}
 	m.pruneSessions(time.Now())
+	var warn, kill []*thread
+	for _, t := range m.threads {
+		t.mu.Lock()
+		quiet := time.Since(t.lastEvent)
+		if t.busy && t.proc != nil {
+			switch {
+			case quiet > stuckKill:
+				kill = append(kill, t)
+			case quiet > stuckWarn && !t.stuckWarned:
+				t.stuckWarned = true
+				warn = append(warn, t)
+			}
+		}
+		t.mu.Unlock()
+	}
 	m.mu.Unlock()
+	for _, t := range warn {
+		m.bot.postPlain(t.channel, t.threadTS, fmt.Sprintf("_(i've been quiet for %d min on this one. say stop or react :octagonal_sign: if i'm stuck; i'll give up by myself at %d min)_", int(stuckWarn.Minutes()), int(stuckKill.Minutes())))
+	}
+	for _, t := range kill {
+		slog.Warn("interrupting stuck turn", "thread", t.key)
+		t.interrupt()
+	}
 
 	for _, t := range idle {
 		t.mu.Lock()
