@@ -42,9 +42,28 @@ func (b *bot) addExtraTools(s *mcp.Server, t *thread) {
 				ch = id
 			}
 			if _, _, _, err := b.api.UpdateMessageContext(ctx, ch, in.TS, slack.MsgOptionMarkdownText(in.Text)); err != nil {
-				return errResult(err)
+				// same fallback as postMarkdown
+				if _, _, _, err2 := b.api.UpdateMessageContext(ctx, ch, in.TS, slack.MsgOptionText(in.Text, false)); err2 != nil {
+					return errResult(err)
+				}
 			}
 			return textResult("edited %s", in.TS)
+		})
+
+	type deleteMsgIn struct {
+		Channel string `json:"channel,omitempty" jsonschema:"defaults to the current conversation"`
+		TS      string `json:"ts" jsonschema:"ts of one of your own messages"`
+	}
+	mcp.AddTool(s, &mcp.Tool{Name: "delete_message", Description: "Delete one of your own messages. Slack refuses for anyone else's."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in deleteMsgIn) (*mcp.CallToolResult, any, error) {
+			ch := firstNonEmpty(in.Channel, t.channel)
+			if id, err := b.resolveChannel(ch); err == nil {
+				ch = id
+			}
+			if _, _, err := b.api.DeleteMessageContext(ctx, ch, in.TS); err != nil {
+				return errResult(err)
+			}
+			return textResult("deleted %s", in.TS)
 		})
 
 	// more tools get added above this line
