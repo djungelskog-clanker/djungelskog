@@ -315,3 +315,20 @@ func TestReactionActions(t *testing.T) {
 		t.Error("random emojis shouldn't trigger anything")
 	}
 }
+
+func TestIsAudio(t *testing.T) {
+	for _, c := range []struct {
+		mime, name string
+		want       bool
+	}{
+		{"audio/mp4", "audio_message.m4a", true},
+		{"video/mp4", "audio_message.mp4", true},
+		{"application/octet-stream", "song.mp3", true},
+		{"image/png", "image.png", false},
+		{"video/mp4", "screen recording.mp4", false},
+	} {
+		if got := isAudio(c.mime, c.name); got != c.want {
+			t.Errorf("isAudio(%q, %q) = %v", c.mime, c.name, got)
+		}
+	}
+}

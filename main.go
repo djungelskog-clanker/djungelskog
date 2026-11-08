@@ -283,6 +283,11 @@ func (b *bot) dispatch(channel, threadTS, ts, user, text string, files []slack.F
 			fmt.Fprintf(&sb, "\n[attached file %q could not be downloaded: %v]", f.Name, err)
 		} else {
 			fmt.Fprintf(&sb, "\n[attached file: %s (%s)]", p, f.Mimetype)
+			if isAudio(f.Mimetype, f.Name) && f.Size < 50<<20 {
+				if tr, err := transcribe(p); err == nil && tr != "" {
+					fmt.Fprintf(&sb, "\n[auto transcript (whisper small, may have mistakes), timestamps in seconds:\n%s]", tr)
+				}
+			}
 		}
 	}
 	for _, a := range b.sharedMessages(channel, ts, text) {
