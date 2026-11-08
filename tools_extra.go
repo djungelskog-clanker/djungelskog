@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/slack-go/slack"
@@ -151,5 +154,108 @@ func (b *bot) addExtraTools(s *mcp.Server, t *thread) {
 			return textResult("topic of %s is now %q", b.channelName(id), in.Topic)
 		})
 
+	type statsIn struct {
+		Channel string `json:"channel,omitempty" jsonschema:"defaults to the current conversation"`
+		Limit   int    `json:"limit,omitempty" jsonschema:"how many recent top-level messages to scan (default 500, max 3000)"`
+	}
+	mcp.AddTool(s, &mcp.Tool{Name: "channel_stats", Description: "Stats over a channel's recent history: top posters, most used emojis (in text and reactions), busiest hours."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in statsIn) (*mcp.CallToolResult, any, error) {
+			id, err := b.resolveChannel(firstNonEmpty(in.Channel, t.channel))
+			if err != nil {
+				return errResult(err)
+			}
+			want := clamp(in.Limit, 500, 3000)
+			var msgs []slack.Message
+			cursor := ""
+			for len(msgs) < want {
+				res, err := b.api.GetConversationHistoryContext(ctx, &slack.GetConversationHistoryParameters{ChannelID: id, Limit: 200, Cursor: cursor})
+				if err != nil {
+					return errResult(err)
+				}
+				msgs = append(msgs, res.Messages...)
+				if cursor = res.ResponseMetaData.NextCursor; cursor == "" || !res.HasMore {
+					break
+				}
+			}
+			return textResult("%s", b.channelStats(id, msgs))
+		})
+
 	// more tools get added above this line
+}
+
+var textEmojiRe = regexp.MustCompile(`:([a-z0-9_+'-]+):`)
+
+type counted struct {
+	key string
+	n   int
+}
+
+func topN(m map[string]int, n int) []counted {
+	var out []counted
+	for k, v := range m {
+		out = append(out, counted{k, v})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].n != out[j].n {
+			return out[i].n > out[j].n
+		}
+		return out[i].key < out[j].key
+	})
+	if len(out) > n {
+		out = out[:n]
+	}
+	return out
+}
+
+func (b *bot) channelStats(id string, msgs []slack.Message) string {
+	posters, emojis, reacts, hours := map[string]int{}, map[string]int{}, map[string]int{}, map[string]int{}
+	var oldest, newest string
+	for _, m := range msgs {
+		if m.User != "" {
+			posters[m.User]++
+		}
+		for _, e := range textEmojiRe.FindAllStringSubmatch(m.Text, -1) {
+			if !strings.HasPrefix(e[1], "skin-tone") {
+				emojis[e[1]]++
+			}
+		}
+		for _, r := range m.Reactions {
+			reacts[strings.SplitN(r.Name, "::", 2)[0]] += r.Count
+		}
+		hours[tsTimeIn(m.Timestamp, berlin).Format("15")]++
+		if oldest == "" || m.Timestamp < oldest {
+			oldest = m.Timestamp
+		}
+		if m.Timestamp > newest {
+			newest = m.Timestamp
+		}
+	}
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "%s: %d top-level messages from %s to %s (berlin time)\n", b.channelName(id), len(msgs), tsTime(oldest), tsTime(newest))
+	sb.WriteString("\ntop posters:\n")
+	for _, c := range topN(posters, 10) {
+		fmt.Fprintf(&sb, "  %s (%s): %d\n", b.userName(c.key), c.key, c.n)
+	}
+	sb.WriteString("\nemojis in message text:\n")
+	for _, c := range topN(emojis, 25) {
+		fmt.Fprintf(&sb, "  :%s: %d\n", c.key, c.n)
+	}
+	sb.WriteString("\nreactions:\n")
+	for _, c := range topN(reacts, 25) {
+		fmt.Fprintf(&sb, "  :%s: %d\n", c.key, c.n)
+	}
+	sb.WriteString("\nmessages per hour:\n")
+	for h := 0; h < 24; h++ {
+		k := fmt.Sprintf("%02d", h)
+		if hours[k] > 0 {
+			fmt.Fprintf(&sb, "  %s:00 %s %d\n", k, strings.Repeat("#", min(hours[k], 40)), hours[k])
+		}
+	}
+	return sb.String()
+}
+
+func tsTimeIn(ts string, loc *time.Location) time.Time {
+	var sec int64
+	fmt.Sscanf(ts, "%d", &sec)
+	return time.Unix(sec, 0).In(loc)
 }

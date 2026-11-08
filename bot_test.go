@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 	"unicode/utf8"
+
+	"github.com/slack-go/slack"
 )
 
 func TestParseWhen(t *testing.T) {
@@ -330,5 +332,24 @@ func TestIsAudio(t *testing.T) {
 		if got := isAudio(c.mime, c.name); got != c.want {
 			t.Errorf("isAudio(%q, %q) = %v", c.mime, c.name, got)
 		}
+	}
+}
+
+func TestChannelStats(t *testing.T) {
+	b := &bot{names: map[string]string{"U1": "ann", "U2": "bo"}, chans: map[string]string{"C1": "#x"}}
+	msgs := []slack.Message{
+		{Msg: slack.Msg{User: "U1", Text: "hi :3c: :3c:", Timestamp: "1794161914.000001",
+			Reactions: []slack.ItemReaction{{Name: "+1::skin-tone-2", Count: 2}}}},
+		{Msg: slack.Msg{User: "U2", Text: "yo :wave::skin-tone-3:", Timestamp: "1794161915.000001"}},
+		{Msg: slack.Msg{User: "U1", Text: "again", Timestamp: "1794161916.000001"}},
+	}
+	out := b.channelStats("C1", msgs)
+	for _, want := range []string{"3 top-level messages", "ann (U1): 2", ":3c: 2", ":wave: 1", ":+1: 2"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stats missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "skin-tone") {
+		t.Errorf("skin tones should be folded:\n%s", out)
 	}
 }
