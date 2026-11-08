@@ -399,7 +399,7 @@ func (m *manager) pump(t *thread, p *claudeProc) {
 				current := t.proc == p
 				wasBusy := t.busy
 				t.mu.Unlock()
-				if !current {
+				if !current || m.bot.stopping.Load() {
 					// reaped or replaced on purpose; the thread state now belongs
 					// to whoever took over, so don't end their turn or touch lastActive
 					return

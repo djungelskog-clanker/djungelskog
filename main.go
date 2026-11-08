@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -89,6 +90,7 @@ type bot struct {
 
 	started  time.Time
 	bootOnce sync.Once
+	stopping atomic.Bool // shutting down: dying claude processes are expected
 
 	cacheMu sync.Mutex
 	names   map[string]string // user id -> display name
@@ -154,6 +156,7 @@ func main() {
 		sig := make(chan os.Signal, 1)
 		signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
 		<-sig
+		b.stopping.Store(true)
 		b.shutdown()
 		os.Exit(0)
 	}()
