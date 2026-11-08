@@ -322,6 +322,14 @@ func (b *bot) addExtraTools(s *mcp.Server, t *thread) {
 			return textResult("posted a voice clip")
 		})
 
+	type usageIn struct {
+		Days int `json:"days,omitempty" jsonschema:"how many days back including today (default 7, max 90)"`
+	}
+	mcp.AddTool(s, &mcp.Tool{Name: "usage_stats", Description: "How much your claude turns cost (api-equivalent usd, tracked since the cost tracker went in): per day, per person, priciest threads, plus thumbs up/down feedback on your messages."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in usageIn) (*mcp.CallToolResult, any, error) {
+			return textResult("%s", b.usageReport(clamp(in.Days, 7, 90), time.Now()))
+		})
+
 	// more tools get added above this line
 }
 
@@ -423,5 +431,52 @@ func (b *bot) tallyPoll(rs []slack.ItemReaction) string {
 	if sb.Len() == 0 {
 		return "no votes yet"
 	}
+	return sb.String()
+}
+
+func (b *bot) usageReport(days int, now time.Time) string {
+	v := b.costs.Get()
+	from := now.AddDate(0, 0, -(days - 1))
+	usd, turns := spentSince(v, from)
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "last %d days: $%.2f over %d turns\n", days, usd, turns)
+	users, threads := map[string]int{}, map[string]int{}
+	userUSD, threadUSD := map[string]float64{}, map[string]float64{}
+	for i := 0; i < days; i++ {
+		day := now.AddDate(0, 0, -i).In(berlin).Format("2006-01-02")
+		d := v[day]
+		if d == nil {
+			continue
+		}
+		fmt.Fprintf(&sb, "  %s: $%.2f (%d turns)\n", day, d.USD, d.Turns)
+		for u, x := range d.ByUser {
+			userUSD[u] += x
+			users[u] = int(userUSD[u] * 100)
+		}
+		for th, x := range d.ByThrd {
+			threadUSD[th] += x
+			threads[th] = int(threadUSD[th] * 100)
+		}
+	}
+	sb.WriteString("by person:\n")
+	for _, c := range topN(users, 10) {
+		fmt.Fprintf(&sb, "  %s: $%.2f\n", b.userName(c.key), userUSD[c.key])
+	}
+	sb.WriteString("priciest threads:\n")
+	for _, c := range topN(threads, 5) {
+		ch, ts, _ := strings.Cut(c.key, ":")
+		fmt.Fprintf(&sb, "  %s thread %s: $%.2f\n", b.channelName(ch), ts, threadUSD[c.key])
+	}
+	good, bad := 0, 0
+	for _, f := range b.feedback.Get() {
+		if f.At.After(from) {
+			if f.Good {
+				good++
+			} else {
+				bad++
+			}
+		}
+	}
+	fmt.Fprintf(&sb, "feedback on my messages: %d good, %d bad\n", good, bad)
 	return sb.String()
 }
