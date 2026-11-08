@@ -96,5 +96,23 @@ func (b *bot) addExtraTools(s *mcp.Server, t *thread) {
 			return textResult("%s", sb.String())
 		})
 
+	type sendDMIn struct {
+		User string `json:"user" jsonschema:"slack user id (U...)"`
+		Text string `json:"text" jsonschema:"markdown text"`
+	}
+	mcp.AddTool(s, &mcp.Tool{Name: "send_dm", Description: "Send someone a direct message from you. Only when asked to, and never to spam people."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in sendDMIn) (*mcp.CallToolResult, any, error) {
+			user := strings.Trim(in.User, "<@> ")
+			ch, _, _, err := b.api.OpenConversationContext(ctx, &slack.OpenConversationParameters{Users: []string{user}})
+			if err != nil {
+				return errResult(err)
+			}
+			ts, err := postMarkdown(ctx, b.api, ch.ID, "", in.Text)
+			if err != nil {
+				return errResult(err)
+			}
+			return textResult("sent to %s (dm %s, ts=%s)", b.userName(user), ch.ID, ts)
+		})
+
 	// more tools get added above this line
 }
