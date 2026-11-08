@@ -161,6 +161,8 @@ func main() {
 		os.Exit(0)
 	}()
 
+	b.serveHealth()
+
 	b.sm = socketmode.New(api)
 	go b.events()
 	if err := b.sm.Run(); err != nil {
