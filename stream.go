@@ -35,6 +35,7 @@ type replyStream struct {
 	plan      string                  // plan title not yet sent
 	posted    []string                // ts of every message we produced
 	anyOutput bool
+	titled    bool // the task list got its title
 }
 
 func newReplyStream(api *slack.Client, channel, threadTS, user, teamID string) *replyStream {
@@ -60,6 +61,13 @@ func (r *replyStream) Paragraph() {
 }
 
 func (r *replyStream) ToolStart(id, title, details string) {
+	if !r.titled {
+		// only replies with tool calls get a task list, so title it here
+		r.titled = true
+		if r.plan == "" {
+			r.plan = randomPlanTitle()
+		}
+	}
 	c := slack.NewTaskUpdateChunk(id, title)
 	c.Status = slack.TaskCardStatus("in_progress")
 	c.Details = details
