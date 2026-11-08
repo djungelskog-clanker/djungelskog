@@ -119,6 +119,16 @@ func (m *manager) noteMessage(ts, key string) {
 	m.mu.Unlock()
 }
 
+// isNew reports whether a thread has never had a claude session.
+func (m *manager) isNew(channel, threadTS string) bool {
+	key := threadKey(channel, threadTS)
+	m.mu.Lock()
+	_, live := m.threads[key]
+	m.mu.Unlock()
+	_, saved := m.sessions.Get()[key]
+	return !live && !saved
+}
+
 // knowsMessage reports whether a message ts already reached a thread.
 func (m *manager) knowsMessage(ts string) bool {
 	m.mu.Lock()

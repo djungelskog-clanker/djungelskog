@@ -290,6 +290,9 @@ func (b *bot) dispatch(channel, threadTS, ts, user, text string, files []slack.F
 			}
 		}
 	}
+	if ctxText := b.threadBackfill(channel, threadTS, ts); ctxText != "" {
+		sb.WriteString("\n" + ctxText)
+	}
 	for _, a := range b.sharedMessages(channel, ts, text) {
 		sb.WriteString("\n" + fmtUnfurl(a))
 	}
@@ -298,6 +301,42 @@ func (b *bot) dispatch(channel, threadTS, ts, user, text string, files []slack.F
 	}
 	b.mgr.Submit(incoming{Channel: channel, ThreadTS: threadTS, TS: ts, User: user, Text: sb.String(),
 		ActionToken: actionToken, Assistant: assistant})
+}
+
+// threadBackfill gives a brand new session the messages that came before the
+// ping, so i don't walk into the middle of a thread clueless.
+func (b *bot) threadBackfill(channel, threadTS, ts string) string {
+	if threadTS == "" || threadTS == ts || !b.mgr.isNew(channel, threadTS) {
+		return ""
+	}
+	msgs, _, _, err := b.api.GetConversationReplies(&slack.GetConversationRepliesParameters{
+		ChannelID: channel, Timestamp: threadTS, Limit: 200,
+	})
+	if err != nil {
+		slog.Debug("thread backfill", "err", err)
+		return ""
+	}
+	var before []slack.Message
+	for _, m := range msgs {
+		if m.Timestamp < ts {
+			before = append(before, m)
+		}
+	}
+	if len(before) == 0 {
+		return ""
+	}
+	const keep = 25
+	skipped := 0
+	if len(before) > keep {
+		// always keep the root, then the latest ones
+		skipped = len(before) - keep
+		before = append(before[:1], before[len(before)-keep+1:]...)
+	}
+	out := "[you were just pinged into an existing thread. earlier messages in it, oldest first"
+	if skipped > 0 {
+		out += fmt.Sprintf(" (%d in the middle left out, read_thread for all)", skipped)
+	}
+	return out + ":\n" + strings.TrimSpace(b.fmtMessages(before)) + "]"
 }
 
 var messageLinkRe = regexp.MustCompile(`https://[a-z0-9.-]*slack\.com/archives/[A-Z0-9]+/p\d+`)
