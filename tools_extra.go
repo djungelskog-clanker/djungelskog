@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"regexp"
 	"sort"
 	"strings"
@@ -178,6 +179,50 @@ func (b *bot) addExtraTools(s *mcp.Server, t *thread) {
 				}
 			}
 			return textResult("%s", b.channelStats(id, msgs))
+		})
+
+	type randomMemberIn struct {
+		Channel string `json:"channel,omitempty" jsonschema:"defaults to the current conversation"`
+		Count   int    `json:"count,omitempty" jsonschema:"how many to pick (default 1)"`
+	}
+	mcp.AddTool(s, &mcp.Tool{Name: "random_member", Description: "Pick random (non-bot) members of a channel, e.g. for 'who has to do X' or giveaways. Uses a real random number generator, not your guess."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in randomMemberIn) (*mcp.CallToolResult, any, error) {
+			id, err := b.resolveChannel(firstNonEmpty(in.Channel, t.channel))
+			if err != nil {
+				return errResult(err)
+			}
+			var members []string
+			cursor := ""
+			for {
+				ids, next, err := b.api.GetUsersInConversationContext(ctx, &slack.GetUsersInConversationParameters{ChannelID: id, Cursor: cursor, Limit: 1000})
+				if err != nil {
+					return errResult(err)
+				}
+				members = append(members, ids...)
+				if cursor = next; cursor == "" || len(members) > 5000 {
+					break
+				}
+			}
+			var humans []string
+			for _, u := range members {
+				if u == b.botUserID {
+					continue
+				}
+				if info, err := b.api.GetUserInfoContext(ctx, u); err == nil && (info.IsBot || info.Deleted) {
+					continue
+				}
+				humans = append(humans, u)
+				if len(humans) >= 300 {
+					break // enough to pick from, and saves api calls
+				}
+			}
+			n := min(max(in.Count, 1), len(humans))
+			rand.Shuffle(len(humans), func(i, j int) { humans[i], humans[j] = humans[j], humans[i] })
+			var picked []string
+			for _, u := range humans[:n] {
+				picked = append(picked, fmt.Sprintf("%s (<@%s>)", b.userName(u), u))
+			}
+			return textResult("picked %d of %d people: %s", n, len(humans), strings.Join(picked, ", "))
 		})
 
 	// more tools get added above this line
