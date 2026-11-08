@@ -114,5 +114,26 @@ func (b *bot) addExtraTools(s *mcp.Server, t *thread) {
 			return textResult("sent to %s (dm %s, ts=%s)", b.userName(user), ch.ID, ts)
 		})
 
+	type whisperIn struct {
+		User    string `json:"user" jsonschema:"slack user id who should see it"`
+		Text    string `json:"text"`
+		Channel string `json:"channel,omitempty" jsonschema:"defaults to the current conversation"`
+	}
+	mcp.AddTool(s, &mcp.Tool{Name: "whisper", Description: "Post an ephemeral message in a channel that only one person can see (it isn't saved in history). Good for secrets in games, private hints, etc."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in whisperIn) (*mcp.CallToolResult, any, error) {
+			ch := firstNonEmpty(in.Channel, t.channel)
+			if id, err := b.resolveChannel(ch); err == nil {
+				ch = id
+			}
+			opts := []slack.MsgOption{slack.MsgOptionText(in.Text, false)}
+			if ch == t.channel && t.threadTS != "" {
+				opts = append(opts, slack.MsgOptionTS(t.threadTS))
+			}
+			if _, err := b.api.PostEphemeralContext(ctx, ch, strings.Trim(in.User, "<@> "), opts...); err != nil {
+				return errResult(err)
+			}
+			return textResult("whispered to %s", b.userName(in.User))
+		})
+
 	// more tools get added above this line
 }
