@@ -268,6 +268,25 @@ func (b *bot) addExtraTools(s *mcp.Server, t *thread) {
 			return textResult("%s\n%s", msg.Text, b.tallyPoll(item.Reactions))
 		})
 
+	type presenceIn struct {
+		User string `json:"user" jsonschema:"slack user id"`
+	}
+	mcp.AddTool(s, &mcp.Tool{Name: "user_presence", Description: "Is someone active on slack right now, and what time is it where they are."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in presenceIn) (*mcp.CallToolResult, any, error) {
+			user := strings.Trim(in.User, "<@> ")
+			p, err := b.api.GetUserPresenceContext(ctx, user)
+			if err != nil {
+				return errResult(err)
+			}
+			local := ""
+			if u, err := b.api.GetUserInfoContext(ctx, user); err == nil {
+				if loc, err := time.LoadLocation(u.TZ); err == nil {
+					local = fmt.Sprintf(", their local time is %s (%s)", time.Now().In(loc).Format("Mon 15:04"), u.TZ)
+				}
+			}
+			return textResult("%s is %s%s", b.userName(user), p.Presence, local)
+		})
+
 	// more tools get added above this line
 }
 
