@@ -349,6 +349,27 @@ func (b *bot) addExtraTools(s *mcp.Server, t *thread) {
 			return textResult("running: %s\n%s", version(), out)
 		})
 
+	type setModelIn struct {
+		Model string `json:"model" jsonschema:"opus, sonnet, haiku, fable, a full model id, or default"`
+	}
+	mcp.AddTool(s, &mcp.Tool{Name: "set_model", Description: "Switch which claude model this thread runs on, starting from the next message (the conversation carries over). Only when someone asks. Cheaper models (haiku, sonnet) are fine for light chat."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in setModelIn) (*mcp.CallToolResult, any, error) {
+			model := strings.ToLower(strings.TrimSpace(in.Model))
+			switch model {
+			case "default", "reset", "":
+				model = ""
+			case "opus", "sonnet", "haiku", "fable":
+			default:
+				if !strings.HasPrefix(model, "claude-") {
+					return errResult(fmt.Errorf("unknown model %q", in.Model))
+				}
+			}
+			if err := b.mgr.setModel(t, model); err != nil {
+				return errResult(err)
+			}
+			return textResult("this thread switches to %s from the next message", firstNonEmpty(model, "the default model"))
+		})
+
 	// more tools get added above this line
 }
 

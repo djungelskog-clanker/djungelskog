@@ -43,6 +43,7 @@ type thread struct {
 	interrupted bool
 	acked       []string // message ts with a "working on it" reaction
 	debounce    *time.Timer
+	restartProc bool // set_model: start a fresh process after this turn
 }
 
 // people often send a thought as two or three quick messages; wait this long
@@ -62,6 +63,7 @@ type manager struct {
 	byToken  map[string]*thread
 	byMsg    map[string]string // message ts -> thread key, for reaction stops
 	sessions *jsonStore[map[string]string]
+	models   *jsonStore[map[string]string]    // thread key -> model override
 	seen     *jsonStore[map[string]time.Time] // thread key -> last finished turn
 }
 
@@ -81,7 +83,11 @@ func newManager(b *bot) (*manager, error) {
 	if err != nil {
 		return nil, err
 	}
-	m := &manager{bot: b, threads: map[string]*thread{}, byToken: map[string]*thread{}, byMsg: map[string]string{}, sessions: s, seen: seen}
+	models, err := openStore[map[string]string](b.cfg.DataDir + "/models.json")
+	if err != nil {
+		return nil, err
+	}
+	m := &manager{bot: b, threads: map[string]*thread{}, byToken: map[string]*thread{}, byMsg: map[string]string{}, sessions: s, seen: seen, models: models}
 	go m.reaper()
 	return m, nil
 }
@@ -136,6 +142,26 @@ func (m *manager) snapshot() (live, busy, queued int, busyKeys []string) {
 		t.mu.Unlock()
 	}
 	return
+}
+
+// setModel changes the model a thread runs on, from its next turn on.
+// "" goes back to the default.
+func (m *manager) setModel(t *thread, model string) error {
+	err := m.models.Update(func(v map[string]string) map[string]string {
+		if v == nil {
+			v = map[string]string{}
+		}
+		if model == "" {
+			delete(v, t.key)
+		} else {
+			v[t.key] = model
+		}
+		return v
+	})
+	t.mu.Lock()
+	t.restartProc = true
+	t.mu.Unlock()
+	return err
 }
 
 // isNew reports whether a thread has never had a claude session.
@@ -234,7 +260,7 @@ func (m *manager) ensureProc(t *thread) (*claudeProc, error) {
 	resume := m.sessions.Get()[t.key]
 	p, err := startClaude(context.Background(), procOptions{
 		WorkDir:      m.bot.cfg.WorkDir,
-		Model:        m.bot.cfg.Model,
+		Model:        firstNonEmpty(m.models.Get()[t.key], m.bot.cfg.Model),
 		Resume:       resume,
 		MCPURL:       m.bot.mcpURL(t.token),
 		SystemAppend: m.bot.systemPrompt(),
@@ -349,9 +375,14 @@ func (m *manager) pump(t *thread, p *claudeProc) {
 		t.lastActive = time.Now()
 		acked := t.acked
 		t.acked = nil
+		restart := t.restartProc
+		t.restartProc = false
 		t.mu.Unlock()
 		for _, ts := range acked {
 			m.bot.unreactAsync(t.channel, ts, ackWorking)
+		}
+		if restart {
+			m.dropProc(t, p) // next turn resumes the session on the new model
 		}
 		m.kick(t)
 	}
