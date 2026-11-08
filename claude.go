@@ -81,6 +81,8 @@ func startClaude(ctx context.Context, o procOptions) (*claudeProc, error) {
 	mcpCfg, _ := json.Marshal(map[string]any{
 		"mcpServers": map[string]any{
 			"slack": map[string]any{"type": "http", "url": o.MCPURL},
+			// hack club attend, oauth'd once with `claude mcp login attend`
+			"attend": map[string]any{"type": "http", "url": "https://attend.hackclub.com/mcp"},
 		},
 	})
 	args := []string{
@@ -91,7 +93,7 @@ func startClaude(ctx context.Context, o procOptions) (*claudeProc, error) {
 		"--include-partial-messages",
 		"--permission-mode", "bypassPermissions",
 		"--mcp-config", string(mcpCfg),
-		// only our slack tools: the org's claude.ai connectors and plugin
+		// only our own servers: the org's claude.ai connectors and plugin
 		// servers add ~20% to every fresh session for things we never use
 		"--strict-mcp-config",
 		"--append-system-prompt", o.SystemAppend,
