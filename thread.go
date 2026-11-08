@@ -119,6 +119,25 @@ func (m *manager) noteMessage(ts, key string) {
 	m.mu.Unlock()
 }
 
+// snapshot describes the live threads for bot_status.
+func (m *manager) snapshot() (live, busy, queued int, busyKeys []string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for key, t := range m.threads {
+		t.mu.Lock()
+		if t.proc != nil {
+			live++
+		}
+		if t.busy {
+			busy++
+			busyKeys = append(busyKeys, key)
+		}
+		queued += len(t.queue)
+		t.mu.Unlock()
+	}
+	return
+}
+
 // isNew reports whether a thread has never had a claude session.
 func (m *manager) isNew(channel, threadTS string) bool {
 	key := threadKey(channel, threadTS)

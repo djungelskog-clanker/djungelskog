@@ -85,6 +85,8 @@ type bot struct {
 	costs      *jsonStore[costData]
 	mcpAddr    string
 
+	started time.Time
+
 	cacheMu sync.Mutex
 	names   map[string]string // user id -> display name
 	chans   map[string]string // channel id -> "#name"
@@ -104,7 +106,7 @@ func main() {
 		os.Exit(1)
 	}
 	b := &bot{cfg: cfg, api: api, teamID: auth.TeamID, botUserID: auth.UserID, botID: auth.BotID,
-		names: map[string]string{}, chans: map[string]string{}}
+		names: map[string]string{}, chans: map[string]string{}, started: time.Now()}
 	slog.Info("authed", "user", auth.User, "user_id", auth.UserID, "team", auth.Team)
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

@@ -330,6 +330,11 @@ func (b *bot) addExtraTools(s *mcp.Server, t *thread) {
 			return textResult("%s", b.usageReport(clamp(in.Days, 7, 90), time.Now()))
 		})
 
+	mcp.AddTool(s, &mcp.Tool{Name: "bot_status", Description: "Your own bot's status: version, uptime, how many threads are live/busy, queued messages, scheduled jobs, today's spend."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyIn) (*mcp.CallToolResult, any, error) {
+			return textResult("%s", b.statusReport())
+		})
+
 	// more tools get added above this line
 }
 
@@ -478,5 +483,20 @@ func (b *bot) usageReport(days int, now time.Time) string {
 		}
 	}
 	fmt.Fprintf(&sb, "feedback on my messages: %d good, %d bad\n", good, bad)
+	return sb.String()
+}
+
+func (b *bot) statusReport() string {
+	live, busy, queued, keys := b.mgr.snapshot()
+	usd, turns := spentSince(b.costs.Get(), time.Now())
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "version %s, up %s (since %s)\n", version(), time.Since(b.started).Round(time.Minute), b.started.Format("Mon 15:04"))
+	fmt.Fprintf(&sb, "threads: %d with a claude process, %d busy, %d messages queued\n", live, busy, queued)
+	for _, k := range keys {
+		ch, ts, _ := strings.Cut(k, ":")
+		fmt.Fprintf(&sb, "  busy: %s thread %s\n", b.channelName(ch), ts)
+	}
+	fmt.Fprintf(&sb, "scheduled jobs: %d\n", len(b.sched.store.Get()))
+	fmt.Fprintf(&sb, "today: $%.2f over %d turns\n", usd, turns)
 	return sb.String()
 }
