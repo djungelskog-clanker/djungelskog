@@ -305,6 +305,7 @@ func (m *manager) pump(t *thread, p *claudeProc) {
 			user := t.trigger.User
 			t.mu.Unlock()
 			rs = newReplyStream(m.bot.api, t.channel, t.threadTS, user, m.bot.teamID)
+			rs.Plan(randomPlanTitle())
 			titles = map[string]string{}
 			textBlock = false
 		}
