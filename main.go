@@ -80,6 +80,7 @@ type bot struct {
 	mgr        *manager
 	sched      *scheduler
 	screenTime *jsonStore[screenTimeData]
+	feedback   *jsonStore[[]feedbackEntry]
 	mcpAddr    string
 
 	cacheMu sync.Mutex
@@ -119,6 +120,10 @@ func main() {
 
 	if b.screenTime, err = openScreenTime(cfg.DataDir + "/screentime.json"); err != nil {
 		slog.Error("screen time", "err", err)
+		os.Exit(1)
+	}
+	if b.feedback, err = openStore[[]feedbackEntry](cfg.DataDir + "/feedback.json"); err != nil {
+		slog.Error("feedback store", "err", err)
 		os.Exit(1)
 	}
 	if b.mgr, err = newManager(b); err != nil {

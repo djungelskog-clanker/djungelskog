@@ -47,6 +47,8 @@ var reactionActions = []reactionAction{
 		prompt: "they want you to redo that answer of yours. read the thread to see what it was answering, then answer again differently and better. don't apologise at length."},
 	{emojis: []string{"wastebasket", "3cnuke"}, label: "delete my message (on my messages)", ownOnly: true, direct: deleteMine},
 	{emojis: []string{"alarm_clock"}, label: "remind me about it in an hour", direct: remindLater},
+	{emojis: []string{"+1", "thumbsup", "heart"}, label: "good answer (gets counted)", ownOnly: true, direct: logFeedback(true)},
+	{emojis: []string{"-1", "thumbsdown"}, label: "bad answer (gets counted)", ownOnly: true, direct: logFeedback(false)},
 	// more actions get added above this line
 }
 

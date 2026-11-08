@@ -39,5 +39,26 @@ func truncRunes(s string, n int) string {
 	return string(r[:n]) + "…"
 }
 
-var _ = strings.TrimSpace
-var _ = time.Now
+type feedbackEntry struct {
+	At      time.Time `json:"at"`
+	User    string    `json:"user"`
+	Channel string    `json:"channel"`
+	TS      string    `json:"ts"`
+	Good    bool      `json:"good"`
+	Snippet string    `json:"snippet"`
+}
+
+// logFeedback records a thumbs up/down on one of my messages. no agent turn,
+// it just gets counted (home tab, usage_stats).
+func logFeedback(good bool) func(b *bot, e *slackevents.ReactionAddedEvent, msg slack.Message) error {
+	return func(b *bot, e *slackevents.ReactionAddedEvent, msg slack.Message) error {
+		return b.feedback.Update(func(v []feedbackEntry) []feedbackEntry {
+			v = append(v, feedbackEntry{At: time.Now(), User: e.User, Channel: e.Item.Channel, TS: msg.Timestamp,
+				Good: good, Snippet: truncRunes(strings.Join(strings.Fields(msg.Text), " "), 120)})
+			if len(v) > 2000 {
+				v = v[len(v)-2000:]
+			}
+			return v
+		})
+	}
+}
