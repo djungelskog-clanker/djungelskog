@@ -33,6 +33,8 @@ var reactionActions = []reactionAction{
 		prompt: "they want you to look at that message and respond to it as if it had @mentioned you. help with whatever it asks or is about."},
 	{emojis: []string{"bug", "beetle"}, label: "debug it",
 		prompt: "that message has code, an error or a bug report in it. find what's wrong, explain it in a line or two, and give the fix. if you can reproduce it here, do."},
+	{emojis: []string{"mag", "mag_right"}, label: "fact-check it",
+		prompt: "fact-check the claims in that message. search the web where needed, say which bits are right, wrong or unclear, and link sources. keep it short and don't be smug about it."},
 	// more actions get added above this line
 }
 
