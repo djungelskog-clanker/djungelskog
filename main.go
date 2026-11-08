@@ -191,6 +191,10 @@ func (b *bot) handle(inner slackevents.EventsAPIInnerEvent, raw []byte) {
 		b.dispatch(e.Channel, threadTS, e.TimeStamp, e.User, e.Text, e.Files, actionToken, false)
 
 	case *slackevents.MessageEvent:
+		if e.SubType == "message_changed" {
+			b.handleEdit(e)
+			return
+		}
 		if e.ChannelType != "im" || e.User == "" || e.User == b.botUserID || e.BotID == b.botID {
 			return
 		}

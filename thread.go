@@ -119,6 +119,14 @@ func (m *manager) noteMessage(ts, key string) {
 	m.mu.Unlock()
 }
 
+// knowsMessage reports whether a message ts already reached a thread.
+func (m *manager) knowsMessage(ts string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, ok := m.byMsg[ts]
+	return ok
+}
+
 // Submit queues a message and sends it right away if claude is idle.
 func (m *manager) Submit(in incoming) {
 	t := m.get(in.Channel, in.ThreadTS, in.Assistant)
