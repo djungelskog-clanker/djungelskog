@@ -42,7 +42,12 @@ type thread struct {
 	dirty       bool // had turns since the last memory review
 	interrupted bool
 	acked       []string // message ts with a "working on it" reaction
+	debounce    *time.Timer
 }
+
+// people often send a thought as two or three quick messages; wait this long
+// after the first one so they land in the same turn.
+var debounceDelay = 1500 * time.Millisecond
 
 func (t *thread) current() incoming {
 	t.mu.Lock()
@@ -127,8 +132,25 @@ func (m *manager) Submit(in incoming) {
 	}
 	t.queue = append(t.queue, in)
 	t.lastActive = time.Now()
+	if t.busy {
+		// kicked again when the running turn ends
+		t.mu.Unlock()
+		return
+	}
+	if debounceDelay <= 0 {
+		t.mu.Unlock()
+		m.kick(t)
+		return
+	}
+	if t.debounce == nil {
+		t.debounce = time.AfterFunc(debounceDelay, func() {
+			t.mu.Lock()
+			t.debounce = nil
+			t.mu.Unlock()
+			m.kick(t)
+		})
+	}
 	t.mu.Unlock()
-	m.kick(t)
 }
 
 // Stop interrupts the running turn in the thread containing message ts.
