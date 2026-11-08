@@ -27,6 +27,8 @@ var reactionActions = []reactionAction{
 		prompt: "read that message out loud: make a voice clip of it with the speak tool (or ~/workspace/voice/speak.sh) and send_file it here. if it's long, read a short summary instead. reply with one short line at most."},
 	{emojis: []string{"globe_with_meridians", "earth_africa", "earth_americas", "earth_asia"}, label: "translate it",
 		prompt: "translate that message into english. if it's already english, translate it into french. just the translation plus a one-line note on anything that doesn't translate cleanly."},
+	{emojis: []string{"memo", "tldr"}, label: "tl;dr of the thread",
+		prompt: "give a short tl;dr of the thread this message is in (read_thread it first): who wanted what, what got decided, what's still open. 3-5 lines."},
 	// more actions get added above this line
 }
 
