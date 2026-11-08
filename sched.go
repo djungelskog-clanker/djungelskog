@@ -1,10 +1,11 @@
 package main
 
 import (
-	"crypto/rand"
+	crand "crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"math/rand/v2"
 	"sort"
 	"strconv"
 	"strings"
@@ -17,16 +18,17 @@ import (
 // job is a scheduled prompt that runs the agent again in the thread it came from,
 // or at the top level of that channel when ThreadTS is empty.
 type job struct {
-	ID        string    `json:"id"`
-	Desc      string    `json:"desc"`
-	Prompt    string    `json:"prompt"`
-	Channel   string    `json:"channel"`
-	ThreadTS  string    `json:"thread_ts"`
-	Assistant bool      `json:"assistant"`
-	User      string    `json:"user"`
-	At        time.Time `json:"at,omitzero"`    // one-shot
-	Cron      string    `json:"cron,omitempty"` // recurring
-	Created   time.Time `json:"created"`
+	ID        string        `json:"id"`
+	Desc      string        `json:"desc"`
+	Prompt    string        `json:"prompt"`
+	Channel   string        `json:"channel"`
+	ThreadTS  string        `json:"thread_ts"`
+	Assistant bool          `json:"assistant"`
+	User      string        `json:"user"`
+	At        time.Time     `json:"at,omitzero"`      // one-shot
+	Cron      string        `json:"cron,omitempty"`   // recurring
+	Jitter    time.Duration `json:"jitter,omitempty"` // random extra delay, up to this
+	Created   time.Time     `json:"created"`
 }
 
 func (j job) describe() string {
@@ -93,17 +95,32 @@ func parseWhen(when string, now time.Time) (at time.Time, spec string, err error
 }
 
 func (s *scheduler) Add(when, prompt, desc string, t *thread, user string, topLevel bool) (job, error) {
+	return s.AddJitter(when, "", prompt, desc, t, user, topLevel)
+}
+
+// AddJitter is Add with a random extra delay of up to jitter (like "45m") on
+// every run, so recurring things don't feel like clockwork.
+func (s *scheduler) AddJitter(when, jitter, prompt, desc string, t *thread, user string, topLevel bool) (job, error) {
 	at, spec, err := parseWhen(when, time.Now())
 	if err != nil {
 		return job{}, err
+	}
+	var jit time.Duration
+	if jitter != "" {
+		if jit, err = time.ParseDuration(jitter); err != nil || jit < 0 || jit > 24*time.Hour {
+			return job{}, fmt.Errorf("jitter should be a duration like 30m, up to 24h")
+		}
 	}
 	if spec == "" && at.Before(time.Now()) {
 		return job{}, fmt.Errorf("%s is in the past", at.Format(time.RFC3339))
 	}
 	b := make([]byte, 3)
-	_, _ = rand.Read(b)
+	_, _ = crand.Read(b)
 	j := job{ID: hex.EncodeToString(b), Desc: desc, Prompt: prompt, Channel: t.channel, ThreadTS: t.threadTS,
-		Assistant: t.assistant, User: user, At: at, Cron: spec, Created: time.Now()}
+		Assistant: t.assistant, User: user, At: at, Cron: spec, Created: time.Now(), Jitter: jit}
+	if spec == "" && jit > 0 {
+		j.At = j.At.Add(rand.N(jit))
+	}
 	if topLevel {
 		if t.assistant {
 			return job{}, fmt.Errorf("top_level doesn't work from the assistant panel")
@@ -145,6 +162,10 @@ func (s *scheduler) fire(id string) {
 	}
 	if j.Cron == "" {
 		_ = s.drop(id)
+	} else if j.Jitter > 0 {
+		d := rand.N(j.Jitter)
+		slog.Info("sched: jitter", "id", id, "delay", d.Round(time.Second))
+		time.Sleep(d)
 	}
 	slog.Info("sched: firing", "id", id, "desc", j.Desc)
 	text := fmt.Sprintf("[scheduled task %s (%s), set up by %s (id: %s). this is not a live message; nobody is waiting on the other end unless the task says so]\n%s",

@@ -393,3 +393,26 @@ func TestBudgetNote(t *testing.T) {
 		t.Error("the owner shouldn't be limited")
 	}
 }
+
+func TestScheduleJitter(t *testing.T) {
+	s, err := newScheduler(&bot{cfg: config{DataDir: t.TempDir()}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.cron.Stop()
+	th := &thread{channel: "C1", threadTS: "1.000100"}
+	before := time.Now()
+	j, err := s.AddJitter("1h", "30m", "x", "", th, "U1", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j.At.Before(before.Add(time.Hour)) || j.At.After(time.Now().Add(90*time.Minute)) {
+		t.Errorf("one-shot with jitter at %v", j.At)
+	}
+	if _, err := s.AddJitter("1h", "banana", "x", "", th, "U1", false); err == nil {
+		t.Error("bad jitter should fail")
+	}
+	if j, err := s.AddJitter("0 16 * * *", "45m", "x", "", th, "U1", false); err != nil || j.Jitter != 45*time.Minute {
+		t.Errorf("recurring jitter: %+v %v", j, err)
+	}
+}
