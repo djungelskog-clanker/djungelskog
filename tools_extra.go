@@ -225,6 +225,31 @@ func (b *bot) addExtraTools(s *mcp.Server, t *thread) {
 			return textResult("picked %d of %d people: %s", n, len(humans), strings.Join(picked, ", "))
 		})
 
+	type pollIn struct {
+		Question string   `json:"question"`
+		Options  []string `json:"options" jsonschema:"2 to 10 options"`
+	}
+	mcp.AddTool(s, &mcp.Tool{Name: "make_poll", Description: "Post a poll in the current thread: numbered options, people vote with the number reactions. Returns the poll's ts for poll_results."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in pollIn) (*mcp.CallToolResult, any, error) {
+			if len(in.Options) < 2 || len(in.Options) > len(pollEmojis) {
+				return errResult(fmt.Errorf("need 2 to %d options", len(pollEmojis)))
+			}
+			var sb strings.Builder
+			fmt.Fprintf(&sb, "**poll: %s**\n", in.Question)
+			for i, o := range in.Options {
+				fmt.Fprintf(&sb, ":%s: %s\n", pollEmojis[i], o)
+			}
+			sb.WriteString("_vote with the reactions_")
+			ts, err := postMarkdown(ctx, b.api, t.channel, t.threadTS, sb.String())
+			if err != nil {
+				return errResult(err)
+			}
+			for i := range in.Options {
+				_ = b.api.AddReactionContext(ctx, pollEmojis[i], slack.NewRefToMessage(t.channel, ts))
+			}
+			return textResult("poll posted, ts=%s", ts)
+		})
+
 	// more tools get added above this line
 }
 
@@ -304,3 +329,5 @@ func tsTimeIn(ts string, loc *time.Location) time.Time {
 	fmt.Sscanf(ts, "%d", &sec)
 	return time.Unix(sec, 0).In(loc)
 }
+
+var pollEmojis = []string{"one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "keycap_ten"}
