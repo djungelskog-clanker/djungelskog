@@ -207,6 +207,8 @@ func (b *bot) handle(inner slackevents.EventsAPIInnerEvent, raw []byte) {
 			if b.mgr.Stop(e.Item.Channel, e.Item.Timestamp) {
 				slog.Info("stopped by reaction", "user", e.User)
 			}
+		default:
+			b.handleReaction(e)
 		}
 
 	case *slackevents.AssistantThreadStartedEvent:
