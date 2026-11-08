@@ -62,3 +62,35 @@ func logFeedback(good bool) func(b *bot, e *slackevents.ReactionAddedEvent, msg 
 		})
 	}
 }
+
+type bookmark struct {
+	At      time.Time `json:"at"`
+	Link    string    `json:"link"`
+	Author  string    `json:"author"`
+	Snippet string    `json:"snippet"`
+}
+
+// saveBookmark keeps a link to the message in the reactor's bookmark list.
+func saveBookmark(b *bot, e *slackevents.ReactionAddedEvent, msg slack.Message) error {
+	link, err := b.api.GetPermalink(&slack.PermalinkParameters{Channel: e.Item.Channel, Ts: msg.Timestamp})
+	if err != nil {
+		return err
+	}
+	author := msg.Username
+	if msg.User != "" {
+		author = b.userName(msg.User)
+	}
+	return b.bookmarks.Update(func(v map[string][]bookmark) map[string][]bookmark {
+		if v == nil {
+			v = map[string][]bookmark{}
+		}
+		for _, bm := range v[e.User] {
+			if bm.Link == link {
+				return v
+			}
+		}
+		v[e.User] = append(v[e.User], bookmark{At: time.Now(), Link: link, Author: author,
+			Snippet: truncRunes(strings.Join(strings.Fields(msg.Text), " "), 200)})
+		return v
+	})
+}

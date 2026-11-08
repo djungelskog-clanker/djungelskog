@@ -49,6 +49,7 @@ var reactionActions = []reactionAction{
 	{emojis: []string{"alarm_clock"}, label: "remind me about it in an hour", direct: remindLater},
 	{emojis: []string{"+1", "thumbsup", "heart"}, label: "good answer (gets counted)", ownOnly: true, direct: logFeedback(true)},
 	{emojis: []string{"-1", "thumbsdown"}, label: "bad answer (gets counted)", ownOnly: true, direct: logFeedback(false)},
+	{emojis: []string{"bookmark", "bookmark_tabs"}, label: "bookmark it (ask me for your bookmarks)", direct: saveBookmark},
 	// more actions get added above this line
 }
 

@@ -519,6 +519,7 @@ func (b *bot) toolServer(t *thread) *mcp.Server {
 			return textResult("sent to %s", strings.Join(append(m.To, m.Cc...), ", "))
 		})
 
+	b.addExtraTools(s, t)
 	return s
 }
 
