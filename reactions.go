@@ -43,6 +43,8 @@ var reactionActions = []reactionAction{
 		prompt: "rewrite that message to be much shorter while keeping what matters. just the rewrite, in the original language."},
 	{emojis: []string{"musical_note", "notes"}, label: "turn it into a haiku",
 		prompt: "turn that message into a haiku (or a tiny 4-line song if it's long). lowercase, just the poem."},
+	{emojis: []string{"repeat", "arrows_counterclockwise"}, label: "redo my answer (on my messages)", ownOnly: true,
+		prompt: "they want you to redo that answer of yours. read the thread to see what it was answering, then answer again differently and better. don't apologise at length."},
 	// more actions get added above this line
 }
 
