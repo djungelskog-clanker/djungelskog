@@ -39,6 +39,8 @@ var reactionActions = []reactionAction{
 		prompt: "make a little picture inspired by that message (python + pillow, an svg rendered to png, ascii art if nothing else works) and send_file it here with a one-line caption."},
 	{emojis: []string{"question", "grey_question"}, label: "explain it simply",
 		prompt: "explain that message simply, like to a smart 12 year old: what it means, any jargon, any context needed. a few lines."},
+	{emojis: []string{"scissors"}, label: "make it shorter",
+		prompt: "rewrite that message to be much shorter while keeping what matters. just the rewrite, in the original language."},
 	// more actions get added above this line
 }
 
