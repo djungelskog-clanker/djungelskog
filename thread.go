@@ -40,6 +40,7 @@ type thread struct {
 	lastActive  time.Time
 	dirty       bool // had turns since the last memory review
 	interrupted bool
+	acked       []string // message ts with a "working on it" reaction
 }
 
 func (t *thread) current() incoming {
@@ -194,12 +195,25 @@ func (m *manager) kick(t *thread) {
 	t.trigger = batch[len(batch)-1]
 	t.busy = true
 	t.interrupted = false
+	for _, in := range batch {
+		if in.TS != "" {
+			t.acked = append(t.acked, in.TS)
+		}
+	}
 	t.mu.Unlock()
+	for _, in := range batch {
+		m.bot.reactAsync(t.channel, in.TS, ackWorking)
+	}
 
 	fail := func(msg string) {
 		t.mu.Lock()
 		t.busy = false
+		acked := t.acked
+		t.acked = nil
 		t.mu.Unlock()
+		for _, ts := range acked {
+			m.bot.unreactAsync(t.channel, ts, ackWorking)
+		}
 		m.bot.postPlain(t.channel, t.threadTS, msg)
 		if t.assistant {
 			m.bot.setStatus(t.channel, t.threadTS, "active")
@@ -266,7 +280,12 @@ func (m *manager) pump(t *thread, p *claudeProc) {
 		t.busy = false
 		t.dirty = true
 		t.lastActive = time.Now()
+		acked := t.acked
+		t.acked = nil
 		t.mu.Unlock()
+		for _, ts := range acked {
+			m.bot.unreactAsync(t.channel, ts, ackWorking)
+		}
 		m.kick(t)
 	}
 

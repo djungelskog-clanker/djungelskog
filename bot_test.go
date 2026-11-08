@@ -289,3 +289,29 @@ func TestScheduleTopLevel(t *testing.T) {
 		t.Fatal("top_level from the assistant panel should fail")
 	}
 }
+
+func TestReactionActions(t *testing.T) {
+	seen := map[string]bool{}
+	for _, a := range reactionActions {
+		if (a.prompt == "") == (a.direct == nil) {
+			t.Errorf("%q needs exactly one of prompt or direct", a.label)
+		}
+		for _, e := range a.emojis {
+			if seen[e] {
+				t.Errorf("emoji %q used twice", e)
+			}
+			seen[e] = true
+		}
+	}
+	for _, stop := range []string{"octagonal_sign", "no_entry", "stop_sign"} {
+		if seen[stop] {
+			t.Errorf("%q is the stop reaction", stop)
+		}
+	}
+	if a := findReaction("+1::skin-tone-3"); a == nil || !a.ownOnly {
+		t.Error("skin tone variant of +1 should match the feedback action")
+	}
+	if findReaction("joy") != nil {
+		t.Error("random emojis shouldn't trigger anything")
+	}
+}
