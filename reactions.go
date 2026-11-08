@@ -37,6 +37,8 @@ var reactionActions = []reactionAction{
 		prompt: "fact-check the claims in that message. search the web where needed, say which bits are right, wrong or unclear, and link sources. keep it short and don't be smug about it."},
 	{emojis: []string{"art", "frame_with_picture"}, label: "draw it",
 		prompt: "make a little picture inspired by that message (python + pillow, an svg rendered to png, ascii art if nothing else works) and send_file it here with a one-line caption."},
+	{emojis: []string{"question", "grey_question"}, label: "explain it simply",
+		prompt: "explain that message simply, like to a smart 12 year old: what it means, any jargon, any context needed. a few lines."},
 	// more actions get added above this line
 }
 
