@@ -56,6 +56,12 @@ func (b *bot) selfRestart(ctx context.Context, t *thread, user string) (string, 
 	if err := os.WriteFile(marker, []byte(time.Now().Format(time.RFC3339)), 0o600); err != nil {
 		return "", err
 	}
+	// date the marker past the restart, so a socket reconnect of this old
+	// process in the next 20s doesn't look like the new one coming up
+	future := time.Now().Add(25 * time.Second)
+	if err := os.Chtimes(marker, future, future); err != nil {
+		return "", err
+	}
 	stamp := fmt.Sprint(time.Now().Unix())
 	if out, err := run(time.Minute, "systemd-run", "--user", "--on-active=20", "--unit=djungelskog-restart-"+stamp,
 		"systemctl", "--user", "restart", "djungelskog.service"); err != nil {

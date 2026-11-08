@@ -206,25 +206,24 @@ func (b *bot) addExtraTools(s *mcp.Server, t *thread) {
 					break
 				}
 			}
-			var humans []string
+			// shuffle first, then only look up as many people as needed to
+			// skip bots, instead of fetching every profile
+			rand.Shuffle(len(members), func(i, j int) { members[i], members[j] = members[j], members[i] })
+			want := max(in.Count, 1)
+			var picked []string
 			for _, u := range members {
+				if len(picked) == want {
+					break
+				}
 				if u == b.botUserID {
 					continue
 				}
 				if info, err := b.api.GetUserInfoContext(ctx, u); err == nil && (info.IsBot || info.Deleted) {
 					continue
 				}
-				humans = append(humans, u)
-				if len(humans) >= 300 {
-					break // enough to pick from, and saves api calls
-				}
-			}
-			n := min(max(in.Count, 1), len(humans))
-			rand.Shuffle(len(humans), func(i, j int) { humans[i], humans[j] = humans[j], humans[i] })
-			var picked []string
-			for _, u := range humans[:n] {
 				picked = append(picked, fmt.Sprintf("%s (<@%s>)", b.userName(u), u))
 			}
+			n, humans := len(picked), members
 			return textResult("picked %d of %d people: %s", n, len(humans), strings.Join(picked, ", "))
 		})
 
