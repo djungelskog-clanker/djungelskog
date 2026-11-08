@@ -140,5 +140,8 @@ func (b *bot) submitReactionTurn(e *slackevents.ReactionAddedEvent, msg slack.Me
 	if note := countScreenTime(b.screenTime, e.User, time.Now()); note != "" {
 		text += "\n" + note
 	}
+	if note := budgetNote(b.costs.Get(), e.User, time.Now()); note != "" {
+		text += "\n" + note
+	}
 	b.mgr.Submit(incoming{Channel: e.Item.Channel, ThreadTS: threadTS, TS: msg.Timestamp, User: e.User, Text: text})
 }
