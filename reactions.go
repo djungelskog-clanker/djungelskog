@@ -31,6 +31,8 @@ var reactionActions = []reactionAction{
 		prompt: "give a short tl;dr of the thread this message is in (read_thread it first): who wanted what, what got decided, what's still open. 3-5 lines."},
 	{emojis: []string{"robot_face"}, label: "treat it like an @mention",
 		prompt: "they want you to look at that message and respond to it as if it had @mentioned you. help with whatever it asks or is about."},
+	{emojis: []string{"bug", "beetle"}, label: "debug it",
+		prompt: "that message has code, an error or a bug report in it. find what's wrong, explain it in a line or two, and give the fix. if you can reproduce it here, do."},
 	// more actions get added above this line
 }
 
