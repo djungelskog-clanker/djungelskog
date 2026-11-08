@@ -335,6 +335,20 @@ func (b *bot) addExtraTools(s *mcp.Server, t *thread) {
 			return textResult("%s", b.statusReport())
 		})
 
+	type changelogIn struct {
+		Count int `json:"count,omitempty" jsonschema:"how many commits (default 20, max 100)"`
+	}
+	mcp.AddTool(s, &mcp.Tool{Name: "changelog", Description: "Recent commits to your own bot's code, and which one is running right now."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in changelogIn) (*mcp.CallToolResult, any, error) {
+			cmd := exec.CommandContext(ctx, "git", "log", "--date=format:%Y-%m-%d %H:%M", "--format=%h %ad %s", "-n", fmt.Sprint(clamp(in.Count, 20, 100)))
+			cmd.Dir = botSourceDir()
+			out, err := cmd.Output()
+			if err != nil {
+				return errResult(err)
+			}
+			return textResult("running: %s\n%s", version(), out)
+		})
+
 	// more tools get added above this line
 }
 
@@ -499,4 +513,15 @@ func (b *bot) statusReport() string {
 	fmt.Fprintf(&sb, "scheduled jobs: %d\n", len(b.sched.store.Get()))
 	fmt.Fprintf(&sb, "today: $%.2f over %d turns\n", usd, turns)
 	return sb.String()
+}
+
+// botSourceDir is where the bot's git checkout lives (the working dir of
+// the service).
+func botSourceDir() string {
+	if wd, err := os.Getwd(); err == nil {
+		if _, err := os.Stat(filepath.Join(wd, "go.mod")); err == nil {
+			return wd
+		}
+	}
+	return filepath.Join(os.Getenv("HOME"), "workspace/slackbot")
 }
