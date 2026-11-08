@@ -25,6 +25,17 @@ func (b *bot) reactAsync(channel, ts, name string) {
 	}()
 }
 
+// reactNow is reactAsync without the goroutine, for when the reaction has to
+// land before a later removal (otherwise a fast turn can leave it stuck).
+func (b *bot) reactNow(channel, ts, name string) {
+	if ts == "" {
+		return
+	}
+	if err := b.api.AddReaction(name, slack.NewRefToMessage(channel, ts)); err != nil {
+		slog.Debug("ack react", "name", name, "err", err)
+	}
+}
+
 func (b *bot) unreactAsync(channel, ts, name string) {
 	if ts == "" {
 		return

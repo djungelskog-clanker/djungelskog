@@ -202,7 +202,7 @@ func (m *manager) kick(t *thread) {
 	}
 	t.mu.Unlock()
 	for _, in := range batch {
-		m.bot.reactAsync(t.channel, in.TS, ackWorking)
+		m.bot.reactNow(t.channel, in.TS, ackWorking)
 	}
 
 	fail := func(msg string) {
