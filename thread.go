@@ -22,6 +22,7 @@ type incoming struct {
 	Text        string // already tagged with sender info
 	ActionToken string
 	Assistant   bool // came from the assistant side panel
+	Queued      bool // waited behind a running turn (has the inbox reaction)
 }
 
 // thread is one slack conversation backed by one claude session.
@@ -120,6 +121,10 @@ func (m *manager) Submit(in incoming) {
 		m.noteMessage(in.TS, t.key)
 	}
 	t.mu.Lock()
+	if t.busy && in.TS != "" {
+		in.Queued = true
+		m.bot.reactAsync(in.Channel, in.TS, ackQueued)
+	}
 	t.queue = append(t.queue, in)
 	t.lastActive = time.Now()
 	t.mu.Unlock()
@@ -202,6 +207,9 @@ func (m *manager) kick(t *thread) {
 	}
 	t.mu.Unlock()
 	for _, in := range batch {
+		if in.Queued {
+			m.bot.unreactAsync(t.channel, in.TS, ackQueued)
+		}
 		m.bot.reactNow(t.channel, in.TS, ackWorking)
 	}
 
