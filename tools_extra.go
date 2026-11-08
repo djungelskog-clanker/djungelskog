@@ -66,5 +66,35 @@ func (b *bot) addExtraTools(s *mcp.Server, t *thread) {
 			return textResult("deleted %s", in.TS)
 		})
 
+	type getReactionsIn struct {
+		Channel string `json:"channel,omitempty" jsonschema:"channel id, #name or a message link; defaults to the current conversation"`
+		TS      string `json:"ts,omitempty" jsonschema:"message ts (not needed with a link)"`
+	}
+	mcp.AddTool(s, &mcp.Tool{Name: "get_reactions", Description: "List the emoji reactions on a message and who added each."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in getReactionsIn) (*mcp.CallToolResult, any, error) {
+			ch, ts := parseRef(firstNonEmpty(in.Channel, t.channel))
+			ts = firstNonEmpty(in.TS, ts)
+			id, err := b.resolveChannel(ch)
+			if err != nil {
+				return errResult(err)
+			}
+			item, err := b.api.GetReactionsContext(ctx, slack.NewRefToMessage(id, ts), slack.GetReactionsParameters{Full: true})
+			if err != nil {
+				return errResult(err)
+			}
+			if len(item.Reactions) == 0 {
+				return textResult("no reactions")
+			}
+			var sb strings.Builder
+			for _, r := range item.Reactions {
+				var names []string
+				for _, u := range r.Users {
+					names = append(names, b.userName(u))
+				}
+				fmt.Fprintf(&sb, ":%s: x%d: %s\n", r.Name, r.Count, strings.Join(names, ", "))
+			}
+			return textResult("%s", sb.String())
+		})
+
 	// more tools get added above this line
 }
