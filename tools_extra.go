@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/slack-go/slack"
 )
 
 type (
@@ -29,4 +30,22 @@ func (b *bot) addExtraTools(s *mcp.Server, t *thread) {
 			}
 			return textResult("%s", sb.String())
 		})
+	type editMsgIn struct {
+		Channel string `json:"channel,omitempty" jsonschema:"defaults to the current conversation"`
+		TS      string `json:"ts" jsonschema:"ts of one of your own messages"`
+		Text    string `json:"text" jsonschema:"new markdown text"`
+	}
+	mcp.AddTool(s, &mcp.Tool{Name: "edit_message", Description: "Replace the text of one of your own earlier messages (e.g. to fix a mistake). Only works on messages you posted."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in editMsgIn) (*mcp.CallToolResult, any, error) {
+			ch := firstNonEmpty(in.Channel, t.channel)
+			if id, err := b.resolveChannel(ch); err == nil {
+				ch = id
+			}
+			if _, _, _, err := b.api.UpdateMessageContext(ctx, ch, in.TS, slack.MsgOptionMarkdownText(in.Text)); err != nil {
+				return errResult(err)
+			}
+			return textResult("edited %s", in.TS)
+		})
+
+	// more tools get added above this line
 }
