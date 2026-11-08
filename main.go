@@ -249,6 +249,11 @@ func (b *bot) handle(inner slackevents.EventsAPIInnerEvent, raw []byte) {
 			b.handleReaction(e)
 		}
 
+	case *slackevents.AppHomeOpenedEvent:
+		if e.Tab == "home" {
+			b.publishHome(e.User)
+		}
+
 	case *slackevents.AssistantThreadStartedEvent:
 		th := e.AssistantThread
 		err := b.api.SetAssistantThreadsSuggestedPrompts(slack.AssistantThreadsSetSuggestedPromptsParameters{
