@@ -78,3 +78,27 @@ func copyFile(src, dst string) error {
 	}
 	return os.WriteFile(dst, data, 0o755)
 }
+
+// announceBack posts in the thread that asked for a restart, once the new
+// process is connected.
+func (b *bot) announceBack() {
+	path := filepath.Join(b.cfg.DataDir, "restart.json")
+	var note restartNote
+	if err := readJSON(path, &note); err != nil {
+		return
+	}
+	_ = os.Remove(path)
+	if time.Since(note.At) > 30*time.Minute {
+		return // stale
+	}
+	text := fmt.Sprintf("_back online, now running `%s` (was `%s`)_", version(), note.From)
+	if note.From == version() {
+		text = fmt.Sprintf("_back online, still on `%s`_", version())
+	}
+	b.postPlain(note.Channel, note.ThreadTS, text)
+}
+
+// onBoot runs once, after the first successful connection.
+func (b *bot) onBoot() {
+	b.announceBack()
+}

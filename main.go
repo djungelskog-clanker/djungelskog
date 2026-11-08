@@ -85,7 +85,8 @@ type bot struct {
 	costs      *jsonStore[costData]
 	mcpAddr    string
 
-	started time.Time
+	started  time.Time
+	bootOnce sync.Once
 
 	cacheMu sync.Mutex
 	names   map[string]string // user id -> display name
@@ -164,6 +165,7 @@ func (b *bot) events() {
 			slog.Info("connected to slack")
 			// the restart watchdog checks this file is newer than its marker
 			_ = os.WriteFile(filepath.Join(b.cfg.DataDir, "last_connected"), []byte(time.Now().Format(time.RFC3339)), 0o600)
+			b.bootOnce.Do(func() { go b.onBoot() })
 		case socketmode.EventTypeEventsAPI:
 			b.sm.Ack(*evt.Request)
 			ev, ok := evt.Data.(slackevents.EventsAPIEvent)
