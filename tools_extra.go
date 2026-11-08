@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"math/rand/v2"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -285,6 +288,38 @@ func (b *bot) addExtraTools(s *mcp.Server, t *thread) {
 				}
 			}
 			return textResult("%s is %s%s", b.userName(user), p.Presence, local)
+		})
+
+	type speakIn struct {
+		Text    string `json:"text" jsonschema:"what to say (keep it under ~600 characters)"`
+		Comment string `json:"comment,omitempty" jsonschema:"optional short message posted with the clip"`
+	}
+	mcp.AddTool(s, &mcp.Tool{Name: "speak", Description: "Say something out loud: makes a voice clip in your own voice (kokoro, english) and uploads it to the current thread."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in speakIn) (*mcp.CallToolResult, any, error) {
+			text := truncRunes(strings.TrimSpace(in.Text), 1200)
+			if text == "" {
+				return errResult(fmt.Errorf("nothing to say"))
+			}
+			out := filepath.Join(b.cfg.DataDir, "files", fmt.Sprintf("voice-%d.m4a", time.Now().UnixNano()))
+			cctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+			defer cancel()
+			script := filepath.Join(os.Getenv("HOME"), "workspace/voice/speak.sh")
+			if msg, err := exec.CommandContext(cctx, script, text, out).CombinedOutput(); err != nil {
+				return errResult(fmt.Errorf("%v: %s", err, truncRunes(string(msg), 300)))
+			}
+			defer os.Remove(out)
+			st, err := os.Stat(out)
+			if err != nil {
+				return errResult(err)
+			}
+			_, err = b.api.UploadFileContext(ctx, slack.UploadFileParameters{
+				File: out, FileSize: int(st.Size()), Filename: "djungelskog.m4a", Title: "djungelskog says",
+				InitialComment: in.Comment, Channel: t.channel, ThreadTimestamp: t.threadTS,
+			})
+			if err != nil {
+				return errResult(err)
+			}
+			return textResult("posted a voice clip")
 		})
 
 	// more tools get added above this line
