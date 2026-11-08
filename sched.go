@@ -14,7 +14,8 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-// job is a scheduled prompt that runs the agent again in the thread it came from.
+// job is a scheduled prompt that runs the agent again in the thread it came from,
+// or at the top level of that channel when ThreadTS is empty.
 type job struct {
 	ID        string    `json:"id"`
 	Desc      string    `json:"desc"`
@@ -91,7 +92,7 @@ func parseWhen(when string, now time.Time) (at time.Time, spec string, err error
 	return at, "", fmt.Errorf("can't parse %q: use a delay (30m, 2h, 1d), a local time (2026-11-02T09:00) or a 5-field cron expression", when)
 }
 
-func (s *scheduler) Add(when, prompt, desc string, t *thread, user string) (job, error) {
+func (s *scheduler) Add(when, prompt, desc string, t *thread, user string, topLevel bool) (job, error) {
 	at, spec, err := parseWhen(when, time.Now())
 	if err != nil {
 		return job{}, err
@@ -103,6 +104,12 @@ func (s *scheduler) Add(when, prompt, desc string, t *thread, user string) (job,
 	_, _ = rand.Read(b)
 	j := job{ID: hex.EncodeToString(b), Desc: desc, Prompt: prompt, Channel: t.channel, ThreadTS: t.threadTS,
 		Assistant: t.assistant, User: user, At: at, Cron: spec, Created: time.Now()}
+	if topLevel {
+		if t.assistant {
+			return job{}, fmt.Errorf("top_level doesn't work from the assistant panel")
+		}
+		j.ThreadTS = ""
+	}
 	if err := s.arm(j); err != nil {
 		return job{}, err
 	}
@@ -184,7 +191,11 @@ func (s *scheduler) List() string {
 	sort.Slice(js, func(a, b int) bool { return js[a].Created.Before(js[b].Created) })
 	var sb strings.Builder
 	for _, j := range js {
-		fmt.Fprintf(&sb, "%s: %s in %s, set by %s\n", j.ID, j.describe(), s.b.channelName(j.Channel), s.b.userName(j.User))
+		where := s.b.channelName(j.Channel)
+		if j.ThreadTS == "" {
+			where += " (top level)"
+		}
+		fmt.Fprintf(&sb, "%s: %s in %s, set by %s\n", j.ID, j.describe(), where, s.b.userName(j.User))
 	}
 	return sb.String()
 }

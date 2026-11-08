@@ -269,3 +269,23 @@ func TestScreenTime(t *testing.T) {
 		t.Error("count didn't reset at berlin midnight")
 	}
 }
+
+func TestScheduleTopLevel(t *testing.T) {
+	s, err := newScheduler(&bot{cfg: config{DataDir: t.TempDir()}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.cron.Stop()
+	th := &thread{channel: "C1", threadTS: "1.000100"}
+	inThread, err := s.Add("1h", "x", "", th, "U1", false)
+	if err != nil || inThread.ThreadTS != "1.000100" {
+		t.Fatalf("thread job: %+v %v", inThread, err)
+	}
+	top, err := s.Add("0 16 * * *", "x", "", th, "U1", true)
+	if err != nil || top.Channel != "C1" || top.ThreadTS != "" {
+		t.Fatalf("top-level job: %+v %v", top, err)
+	}
+	if _, err := s.Add("1h", "x", "", &thread{channel: "D1", threadTS: "2.0", assistant: true}, "U1", true); err == nil {
+		t.Fatal("top_level from the assistant panel should fail")
+	}
+}

@@ -161,9 +161,10 @@ type (
 		Channel string `json:"channel"`
 	}
 	scheduleIn struct {
-		When   string `json:"when" jsonschema:"a delay like 30m / 2h, a local time like 2026-11-02T09:00, or a 5-field cron expression for recurring jobs"`
-		Prompt string `json:"prompt" jsonschema:"what you should do when it fires, written as instructions to your future self"`
-		Desc   string `json:"desc,omitempty" jsonschema:"short label"`
+		When     string `json:"when" jsonschema:"a delay like 30m / 2h, a local time like 2026-11-02T09:00, or a 5-field cron expression for recurring jobs"`
+		Prompt   string `json:"prompt" jsonschema:"what you should do when it fires, written as instructions to your future self"`
+		Desc     string `json:"desc,omitempty" jsonschema:"short label"`
+		TopLevel bool   `json:"top_level,omitempty" jsonschema:"run it as a new top-level message in this channel instead of in this thread. it starts without this thread's context, so make the prompt self-contained"`
 	}
 	cancelIn struct {
 		ID string `json:"id"`
@@ -425,10 +426,10 @@ func (b *bot) toolServer(t *thread) *mcp.Server {
 			return textResult("done")
 		})
 
-	mcp.AddTool(s, &mcp.Tool{Name: "schedule_task", Description: "Schedule a one-shot or recurring task that runs you again in this same thread. Use for reminders, follow-ups and 'check back later'. Only when someone asks."},
+	mcp.AddTool(s, &mcp.Tool{Name: "schedule_task", Description: "Schedule a one-shot or recurring task that runs you again in this same thread (or at the channel's top level with top_level). Use for reminders, follow-ups and 'check back later'. Only when someone asks."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in scheduleIn) (*mcp.CallToolResult, any, error) {
 			trig := t.current()
-			j, err := b.sched.Add(in.When, in.Prompt, in.Desc, t, trig.User)
+			j, err := b.sched.Add(in.When, in.Prompt, in.Desc, t, trig.User, in.TopLevel)
 			if err != nil {
 				return errResult(err)
 			}

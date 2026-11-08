@@ -86,7 +86,9 @@ func (r *replyStream) ToolDone(id, title string, isErr bool, output string) {
 
 // Flush pushes pending tasks and text to slack.
 func (r *replyStream) Flush(ctx context.Context) {
-	if r.broken || (len(r.tasks) == 0 && r.text.Len() == 0 && r.plan == "") {
+	// streaming only works inside a thread; top-level replies (scheduled
+	// top_level jobs) just buffer and get posted whole by Finish
+	if r.broken || r.threadTS == "" || (len(r.tasks) == 0 && r.text.Len() == 0 && r.plan == "") {
 		return
 	}
 	text := r.text.String()
@@ -159,7 +161,7 @@ func (r *replyStream) Finish(ctx context.Context, note string) {
 	}
 	r.Flush(ctx)
 	r.stop(ctx)
-	if !r.broken {
+	if !r.broken && r.threadTS != "" {
 		return
 	}
 	rest := strings.TrimSpace(r.text.String())
