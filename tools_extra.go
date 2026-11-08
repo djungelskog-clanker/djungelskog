@@ -250,6 +250,24 @@ func (b *bot) addExtraTools(s *mcp.Server, t *thread) {
 			return textResult("poll posted, ts=%s", ts)
 		})
 
+	type pollResultsIn struct {
+		Channel string `json:"channel,omitempty" jsonschema:"defaults to the current conversation"`
+		TS      string `json:"ts" jsonschema:"ts of the poll message"`
+	}
+	mcp.AddTool(s, &mcp.Tool{Name: "poll_results", Description: "Count the votes on a poll made with make_poll (your own starter reactions don't count)."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in pollResultsIn) (*mcp.CallToolResult, any, error) {
+			ch := firstNonEmpty(in.Channel, t.channel)
+			if id, err := b.resolveChannel(ch); err == nil {
+				ch = id
+			}
+			item, err := b.api.GetReactionsContext(ctx, slack.NewRefToMessage(ch, in.TS), slack.GetReactionsParameters{Full: true})
+			if err != nil {
+				return errResult(err)
+			}
+			msg, _ := b.fetchMessage(ctx, ch, in.TS)
+			return textResult("%s\n%s", msg.Text, b.tallyPoll(item.Reactions))
+		})
+
 	// more tools get added above this line
 }
 
@@ -331,3 +349,25 @@ func tsTimeIn(ts string, loc *time.Location) time.Time {
 }
 
 var pollEmojis = []string{"one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "keycap_ten"}
+
+func (b *bot) tallyPoll(rs []slack.ItemReaction) string {
+	var sb strings.Builder
+	for i, e := range pollEmojis {
+		for _, r := range rs {
+			if r.Name != e {
+				continue
+			}
+			var voters []string
+			for _, u := range r.Users {
+				if u != b.botUserID {
+					voters = append(voters, b.userName(u))
+				}
+			}
+			fmt.Fprintf(&sb, "option %d: %d votes (%s)\n", i+1, len(voters), strings.Join(voters, ", "))
+		}
+	}
+	if sb.Len() == 0 {
+		return "no votes yet"
+	}
+	return sb.String()
+}
