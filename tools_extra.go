@@ -135,5 +135,21 @@ func (b *bot) addExtraTools(s *mcp.Server, t *thread) {
 			return textResult("whispered to %s", b.userName(in.User))
 		})
 
+	type topicIn struct {
+		Channel string `json:"channel,omitempty" jsonschema:"defaults to the current conversation"`
+		Topic   string `json:"topic"`
+	}
+	mcp.AddTool(s, &mcp.Tool{Name: "set_channel_topic", Description: "Change a channel's topic. Only when asked."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in topicIn) (*mcp.CallToolResult, any, error) {
+			id, err := b.resolveChannel(firstNonEmpty(in.Channel, t.channel))
+			if err != nil {
+				return errResult(err)
+			}
+			if _, err := b.api.SetTopicOfConversationContext(ctx, id, in.Topic); err != nil {
+				return errResult(err)
+			}
+			return textResult("topic of %s is now %q", b.channelName(id), in.Topic)
+		})
+
 	// more tools get added above this line
 }
