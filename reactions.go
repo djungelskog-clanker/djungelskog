@@ -29,6 +29,8 @@ var reactionActions = []reactionAction{
 		prompt: "translate that message into english. if it's already english, translate it into french. just the translation plus a one-line note on anything that doesn't translate cleanly."},
 	{emojis: []string{"memo", "tldr"}, label: "tl;dr of the thread",
 		prompt: "give a short tl;dr of the thread this message is in (read_thread it first): who wanted what, what got decided, what's still open. 3-5 lines."},
+	{emojis: []string{"robot_face"}, label: "treat it like an @mention",
+		prompt: "they want you to look at that message and respond to it as if it had @mentioned you. help with whatever it asks or is about."},
 	// more actions get added above this line
 }
 
