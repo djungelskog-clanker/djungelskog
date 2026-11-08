@@ -41,6 +41,8 @@ var reactionActions = []reactionAction{
 		prompt: "explain that message simply, like to a smart 12 year old: what it means, any jargon, any context needed. a few lines."},
 	{emojis: []string{"scissors"}, label: "make it shorter",
 		prompt: "rewrite that message to be much shorter while keeping what matters. just the rewrite, in the original language."},
+	{emojis: []string{"musical_note", "notes"}, label: "turn it into a haiku",
+		prompt: "turn that message into a haiku (or a tiny 4-line song if it's long). lowercase, just the poem."},
 	// more actions get added above this line
 }
 
