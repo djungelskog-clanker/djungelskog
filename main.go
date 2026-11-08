@@ -259,11 +259,7 @@ func (b *bot) handle(inner slackevents.EventsAPIInnerEvent, raw []byte) {
 		err := b.api.SetAssistantThreadsSuggestedPrompts(slack.AssistantThreadsSetSuggestedPromptsParameters{
 			ChannelID: th.ChannelID,
 			ThreadTS:  th.ThreadTimeStamp,
-			Prompts: []slack.AssistantThreadsPrompt{
-				{Title: "what's new in my channels", Message: "catch me up on what happened in my channels today"},
-				{Title: "make something silly", Message: "make me something silly"},
-				{Title: "remind me", Message: "remind me in an hour to drink water"},
-			},
+			Prompts:   suggestedPrompts(4),
 		})
 		if err != nil {
 			slog.Warn("suggested prompts", "err", err)
