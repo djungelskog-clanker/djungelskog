@@ -101,4 +101,53 @@ func (b *bot) announceBack() {
 // onBoot runs once, after the first successful connection.
 func (b *bot) onBoot() {
 	b.announceBack()
+	b.resumeCutOff()
+}
+
+// cutOff is a turn that was still running when the bot shut down.
+type cutOff struct {
+	Channel   string `json:"channel"`
+	ThreadTS  string `json:"thread_ts"`
+	User      string `json:"user"`
+	Assistant bool   `json:"assistant"`
+}
+
+// shutdown runs on SIGTERM: threads that are mid-turn get a short note and
+// are written down so the next boot can pick them back up.
+func (b *bot) shutdown() {
+	var cut []cutOff
+	b.mgr.mu.Lock()
+	for _, t := range b.mgr.threads {
+		t.mu.Lock()
+		if t.busy || len(t.queue) > 0 {
+			cut = append(cut, cutOff{Channel: t.channel, ThreadTS: t.threadTS, User: t.trigger.User, Assistant: t.assistant})
+		}
+		t.mu.Unlock()
+	}
+	b.mgr.mu.Unlock()
+	if len(cut) == 0 {
+		return
+	}
+	if err := writeJSON(filepath.Join(b.cfg.DataDir, "cutoff.json"), cut); err != nil {
+		slog.Error("saving cut-off turns", "err", err)
+	}
+	for _, c := range cut {
+		b.postPlain(c.Channel, c.ThreadTS, "_(restarting mid-turn, i'll pick this back up in a sec)_")
+	}
+	slog.Info("shutdown: saved cut-off turns", "count", len(cut))
+}
+
+// resumeCutOff nudges the threads that shutdown() wrote down.
+func (b *bot) resumeCutOff() {
+	path := filepath.Join(b.cfg.DataDir, "cutoff.json")
+	var cut []cutOff
+	if err := readJSON(path, &cut); err != nil {
+		return
+	}
+	_ = os.Remove(path)
+	for _, c := range cut {
+		b.mgr.Submit(incoming{Channel: c.Channel, ThreadTS: c.ThreadTS, User: c.User, Assistant: c.Assistant,
+			Text: "[system, not a slack message: the bot restarted while you were in the middle of a turn in this thread. " +
+				"look at where you were and finish what you were doing (re-check anything half done). don't call restart_self again because of this note.]"})
+	}
 }

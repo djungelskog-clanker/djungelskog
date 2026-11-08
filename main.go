@@ -9,10 +9,12 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -147,6 +149,14 @@ func main() {
 		slog.Error("scheduler", "err", err)
 		os.Exit(1)
 	}
+
+	go func() {
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
+		<-sig
+		b.shutdown()
+		os.Exit(0)
+	}()
 
 	b.sm = socketmode.New(api)
 	go b.events()
