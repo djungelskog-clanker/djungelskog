@@ -67,6 +67,7 @@ type claudeProc struct {
 	reqID  atomic.Int64
 
 	sessionID atomic.Value // string
+	lastCost  float64      // cumulative cost at the end of the previous turn (pump goroutine only)
 }
 
 type procOptions struct {

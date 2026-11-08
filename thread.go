@@ -439,6 +439,9 @@ func (m *manager) pump(t *thread, p *claudeProc) {
 				case (rs == nil || !rs.anyOutput) && strings.TrimSpace(ev.Result) != "":
 					open().Text(ev.Result)
 				}
+				spent := turnCost(ev.CostUSD, p.lastCost)
+				p.lastCost = ev.CostUSD
+				recordCost(m.bot.costs, time.Now(), t.current().User, t.key, spent)
 				endTurn(note, plan)
 				slog.Info("turn done", "thread", t.key, "session_cost_usd", ev.CostUSD, "subtype", ev.Subtype)
 			}

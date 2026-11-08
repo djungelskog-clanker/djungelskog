@@ -353,3 +353,26 @@ func TestChannelStats(t *testing.T) {
 		t.Errorf("skin tones should be folded:\n%s", out)
 	}
 }
+
+func TestCosts(t *testing.T) {
+	if got := turnCost(0.5, 0.2); got < 0.299 || got > 0.301 {
+		t.Errorf("delta = %v", got)
+	}
+	if got := turnCost(0.1, 0.5); got != 0.1 {
+		t.Errorf("fresh process should count from zero, got %v", got)
+	}
+	s, err := openStore[costData](t.TempDir() + "/c.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 8, 20, 0, 0, 0, berlin)
+	recordCost(s, now, "U1", "C1:1", 0.25)
+	recordCost(s, now, "U2", "C1:1", 0.5)
+	recordCost(s, now.Add(-48*time.Hour), "U1", "C1:2", 1)
+	if usd, turns := spentSince(s.Get(), now); usd != 0.75 || turns != 2 {
+		t.Errorf("today = %v / %d", usd, turns)
+	}
+	if usd, _ := spentSince(s.Get(), now.Add(-7*24*time.Hour)); usd != 1.75 {
+		t.Errorf("week = %v", usd)
+	}
+}

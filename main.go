@@ -82,6 +82,7 @@ type bot struct {
 	screenTime *jsonStore[screenTimeData]
 	feedback   *jsonStore[[]feedbackEntry]
 	bookmarks  *jsonStore[map[string][]bookmark]
+	costs      *jsonStore[costData]
 	mcpAddr    string
 
 	cacheMu sync.Mutex
@@ -129,6 +130,10 @@ func main() {
 	}
 	if b.bookmarks, err = openStore[map[string][]bookmark](cfg.DataDir + "/bookmarks.json"); err != nil {
 		slog.Error("bookmarks store", "err", err)
+		os.Exit(1)
+	}
+	if b.costs, err = openStore[costData](cfg.DataDir + "/costs.json"); err != nil {
+		slog.Error("costs store", "err", err)
 		os.Exit(1)
 	}
 	if b.mgr, err = newManager(b); err != nil {
