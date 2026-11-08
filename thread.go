@@ -318,6 +318,7 @@ func (m *manager) pump(t *thread, p *claudeProc) {
 				note := ""
 				if wasBusy {
 					note = "_(my claude process died mid-turn. send that again?)_"
+					m.markFailed(t)
 				}
 				endTurn(note, "")
 				return
@@ -393,6 +394,7 @@ func (m *manager) pump(t *thread, p *claudeProc) {
 				case stopped:
 					note, plan = "_(stopped)_", "stopped"
 				case ev.IsError:
+					m.markFailed(t)
 					note = fmt.Sprintf("_(that turn ended with an error: %s)_", firstNonEmpty(ev.Result, ev.Subtype))
 				case (rs == nil || !rs.anyOutput) && strings.TrimSpace(ev.Result) != "":
 					open().Text(ev.Result)
@@ -403,6 +405,14 @@ func (m *manager) pump(t *thread, p *claudeProc) {
 		}
 	}
 }
+
+// markFailed puts a little "oops" reaction on the message that started a
+// turn that errored out.
+func (m *manager) markFailed(t *thread) {
+	trig := t.current()
+	m.bot.reactAsync(t.channel, trig.TS, ackFailed)
+}
+
 func (m *manager) track(t *thread, rs *replyStream) {
 	for _, ts := range rs.posted {
 		m.noteMessage(ts, t.key)
