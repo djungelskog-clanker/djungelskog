@@ -162,6 +162,8 @@ func (b *bot) events() {
 		switch evt.Type {
 		case socketmode.EventTypeConnected:
 			slog.Info("connected to slack")
+			// the restart watchdog checks this file is newer than its marker
+			_ = os.WriteFile(filepath.Join(b.cfg.DataDir, "last_connected"), []byte(time.Now().Format(time.RFC3339)), 0o600)
 		case socketmode.EventTypeEventsAPI:
 			b.sm.Ack(*evt.Request)
 			ev, ok := evt.Data.(slackevents.EventsAPIEvent)

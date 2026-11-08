@@ -370,6 +370,15 @@ func (b *bot) addExtraTools(s *mcp.Server, t *thread) {
 			return textResult("this thread switches to %s from the next message", firstNonEmpty(model, "the default model"))
 		})
 
+	mcp.AddTool(s, &mcp.Tool{Name: "restart_self", Description: "Deploy your own code changes: runs go test, builds, swaps the binary and restarts the bot in 20s (killing this session), with automatic rollback if the new build doesn't reconnect. Tell the chat first, then end your turn right after calling this."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyIn) (*mcp.CallToolResult, any, error) {
+			msg, err := b.selfRestart(ctx, t, t.current().User)
+			if err != nil {
+				return errResult(err)
+			}
+			return textResult("%s", msg)
+		})
+
 	// more tools get added above this line
 }
 

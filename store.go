@@ -54,3 +54,16 @@ func (s *jsonStore[T]) Update(fn func(v T) T) error {
 	}
 	return os.Rename(tmp, s.path)
 }
+
+// writeJSON writes v to path atomically.
+func writeJSON(path string, v any) error {
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
